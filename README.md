@@ -43,7 +43,7 @@ Measured end to end on the real competition data: hide 20% of the clients, run t
 
 That is about **8× better at k = 500** and **7× better at k = 2000**. An ablation on the same data shows each ingredient matters (Recall@2000: activity only 22.5%, without geography 29.4%, full method 54.4%, earlier 5-split run).
 
-> **Honest caveat.** The method's weights were tuned on the same 300 clients, so expect the number on unseen data to be somewhat lower. Eleven alternative ranking schemes were tried; none beat this one beyond noise, so the simplest was kept. Details in [`docs/MODEL_DATA_CARD.md`](docs/MODEL_DATA_CARD.md).
+> **Honest caveat.** The method's weights were tuned on the same 300 clients, so expect the number on unseen data to be somewhat lower. Two neural embedding models (multilingual-e5-base, BGE-M3) were also compared against our TF-IDF + SVD text representation and did not beat it (Recall@2000: 55.2% vs 50.3% and 48.8%). Eleven alternative ranking schemes were tried; none beat this one beyond noise, so the simplest was kept. Details in [`docs/MODEL_DATA_CARD.md`](docs/MODEL_DATA_CARD.md).
 
 | Speed | |
 |---|---|
