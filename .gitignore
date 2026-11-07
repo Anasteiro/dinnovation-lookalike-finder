@@ -1,0 +1,12 @@
+# The competition data is confidential: never commit it. It travels in the READY zip only.
+data/
+outputs/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+frontend_src/node_modules/
+frontend_src/dist/
+*.log
+.cache/

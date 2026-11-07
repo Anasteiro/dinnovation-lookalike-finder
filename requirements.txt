@@ -1,0 +1,18 @@
+# Core (needed for data, features, evaluation)
+numpy>=1.26
+pandas>=2.1
+scipy>=1.11
+scikit-learn>=1.4
+openpyxl>=3.1
+pyzipper>=0.3.6
+statsmodels>=0.14
+# Local ML (embeddings). On the RTX 3060 install the CUDA build of torch first:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+sentence-transformers>=3.0
+# Later parts
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+h3>=4.0
+pytest>=8.0
+httpx>=0.27

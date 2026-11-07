@@ -1,0 +1,20 @@
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { RouterProvider } from "@tanstack/react-router";
+import { getRouter } from "./router";
+import "@fontsource/ibm-plex-sans/greek-400.css";
+import "@fontsource/ibm-plex-sans/greek-500.css";
+import "@fontsource/ibm-plex-sans/greek-600.css";
+import "@fontsource/ibm-plex-sans/greek-700.css";
+import "@fontsource/ibm-plex-sans/latin-400.css";
+import "@fontsource/ibm-plex-sans/latin-500.css";
+import "@fontsource/ibm-plex-sans/latin-600.css";
+import "@fontsource/ibm-plex-sans/latin-700.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
+import "./styles.css";
+
+const container = document.getElementById("root");
+if (!container) throw new Error("Δεν βρέθηκε το σημείο εκκίνησης της εφαρμογής.");
+const router = getRouter();
+createRoot(container).render(<StrictMode><RouterProvider router={router} /></StrictMode>);

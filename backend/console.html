@@ -1,0 +1,60 @@
+<!doctype html><html lang="el"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local ICP Engine</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:980px;margin:24px auto;padding:0 16px;color:#1b2430;background:#f6f8fb}
+h1{font-size:22px}button,input{font:inherit}button{padding:8px 14px;border:0;border-radius:8px;background:#1f5eff;color:#fff;cursor:pointer;margin:4px 4px 4px 0}
+button.alt{background:#e6ebf5;color:#1b2430}.card{background:#fff;border-radius:12px;padding:14px 16px;margin:12px 0;box-shadow:0 1px 3px #0001}
+.badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:#eef2ff;color:#2a3bb0;margin-right:6px}
+.ai{background:#fff4d6;color:#7a5200}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:6px 8px;border-bottom:1px solid #e5e9f2;text-align:left;vertical-align:top}
+pre{background:#0e1621;color:#cfe3ff;padding:10px;border-radius:8px;overflow:auto;max-height:220px;font-size:12px}small{color:#5b6779}
+</style></head><body>
+<h1>Local ICP Engine <small>(test console, localhost only)</small></h1>
+<div class="card"><b>1. Φόρτωση πελατολογίου</b> (.xlsx ή .csv με ΑΦΜ και προαιρετικά Τζίρο)<br>
+<input type="file" id="f" accept=".xlsx,.xls,.csv,.tsv"> <button id="go">Ανάλυση</button> <button class="alt" id="sample">Χρήση δείγματος διαγωνισμού</button>
+<div id="health"><small></small></div><pre id="log" hidden></pre></div>
+<div id="out"></div>
+<script>
+const $=s=>document.querySelector(s);
+function el(t,a,...k){
+  // second argument is attributes ONLY if it is a plain object; otherwise it is a child (string, number, node, array)
+  if(a===undefined||a===null)a={};
+  else if(typeof a!=='object'||a instanceof Node||Array.isArray(a)){k.unshift(a);a={}}
+  const e=document.createElement(t);
+  for(const[x,y]of Object.entries(a)){if(x==='class')e.className=y;else e.setAttribute(x,y)}
+  k.flat(Infinity).forEach(c=>{if(c===false||c===null||c===undefined)return;e.append(c instanceof Node?c:document.createTextNode(String(c)))});
+  return e}
+fetch('/api/health').then(r=>r.json()).then(h=>{$('#health small').textContent=`data: ${h.data_found?'OK':'NOT FOUND'} · embedding: ${h.embedding} · Ollama: ${h.ollama_running?'running':'off'} · LLM: ${h.llm_model||'-'}`});
+async function start(fd){
+  $('#out').replaceChildren();const log=$('#log');log.hidden=false;log.textContent='';
+  const r=await fetch('/api/analyze',{method:'POST',body:fd});const d=await r.json();
+  if(!r.ok){log.textContent='ERROR: '+(d.detail||r.status);return}
+  const es=new EventSource(`/api/jobs/${d.job_id}/events`);
+  es.onmessage=e=>{log.textContent+=e.data+'\n';log.scrollTop=1e9};
+  es.addEventListener('end',async e=>{es.close();if(JSON.parse(e.data).status==='done')show(d.job_id)});
+}
+$('#go').onclick=()=>{const f=$('#f').files[0];if(!f)return alert('Διάλεξε αρχείο');const fd=new FormData();fd.append('file',f);start(fd)};
+$('#sample').onclick=()=>{const fd=new FormData();fd.append('use_sample','true');start(fd)};
+async function show(id){
+  const R=await (await fetch('/api/results/'+id)).json();const out=$('#out');const D=R.dataset;
+  out.append(el('div',{class:'card'},el('b','Σύνοψη: '),`${D.profiles_found} profile(s) · ${D.matched_vats}/${D.client_vats} ΑΦΜ ταυτοποιήθηκαν · ${D.execution_seconds}s · ${R.meta.selection_rule}`,el('br'),
+    ['profiles.json','assignments.csv','lookalikes.csv','lookalikes_global.csv'].map(n=>el('a',{href:`/api/export/${id}/${n}`,class:'badge'},n)),
+    el('br'),el('button',{id:'nar'},'Περιγραφές με τοπικό LLM'),el('button',{class:'alt',id:'tr'},'Transparency')));
+  R.profiles.forEach(p=>{const c=el('div',{class:'card'},el('b',`${p.profile_id} · ${p.title}`),el('br'),
+    el('span',{class:'badge'},`πελάτες ${p.n_clients}`),el('span',{class:'badge'},`τζίρος ${p.turnover_share==null?'-':Math.round(p.turnover_share*100)+'%'}`),
+    el('span',{class:'badge'},`σταθερότητα ${Math.round(p.stability*100)}%`),el('span',{class:'badge'},`εμπιστοσύνη ${Math.round(p.confidence*100)}%`),
+    p.description_is_ai?el('span',{class:'badge ai'},(p.description_meta||{}).ai_label||'Κείμενο που παρήχθη από AI'):'',
+    el('p',p.description),
+    el('table',{},el('tr',{},['Χαρακτηριστικό','% profile','% αγορά','lift','q'].map(h=>el('th',h))),
+      p.features.slice(0,6).map(f=>el('tr',{},el('td',f.label),el('td',(f.share_in_profile*100).toFixed(0)+'%'),el('td',(f.share_in_universe*100).toFixed(0)+'%'),el('td','×'+f.shrunk_lift.toFixed(1)),el('td',f.q_value.toExponential(1))))));
+    out.append(c)});
+  const L=await (await fetch(`/api/lookalikes?job=${id}&limit=15`)).json();
+  out.append(el('div',{class:'card'},el('b','Top lookalikes (global) '),el('small',`(${L.total} συνολικά)`),
+    el('table',{},el('tr',{},['#','Επιχείρηση','Δήμος','Profile','Score','Αιτιολόγηση'].map(h=>el('th',h))),
+     L.items.map(i=>el('tr',{},el('td',i.rank),el('td',i.name),el('td',i.municipality),el('td',i.profile_id),el('td',i.score.toFixed(3)),el('td',i.reason))))));
+  $('#nar').onclick=async()=>{const m=prompt('Όνομα μοντέλου Ollama (ή άφησέ το κενό αν ορίστηκε στο serve):','')||'';const fd=new FormData();if(m)fd.append('model',m);
+    const r=await fetch(`/api/jobs/${id}/narrate`,{method:'POST',body:fd});if(!r.ok){alert((await r.json()).detail);return}
+    const t=setInterval(async()=>{const s=await (await fetch('/api/jobs/'+id)).json();$('#log').textContent=JSON.stringify(s.narration)+'\n'+$('#log').textContent;
+      if(['done','error'].includes(s.narration.status)){clearInterval(t);if(s.narration.status==='done'){$('#out').replaceChildren();show(id)}}},1500)};
+  $('#tr').onclick=async()=>{const T=await (await fetch('/api/transparency/'+id)).json();out.append(el('div',{class:'card'},el('b','Transparency'),el('pre',JSON.stringify(T,null,1))))};
+}
+</script></body></html>
