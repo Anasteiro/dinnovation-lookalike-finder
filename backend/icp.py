@@ -42,18 +42,15 @@ def kernel_kmeans(K, w, k, rng, n_init=6, max_iter=60, active=None):
         dist = np.stack([diag + diag[c] - 2 * K[:, c] for c in centers], axis=1)
         labels = dist.argmin(1)
         for _ in range(max_iter):
+            V = np.zeros((m, k)); V[np.arange(m), labels] = wf          # all clusters in ONE matrix product (was k slices)
+            Wc = V.sum(0); KV = K @ V; t3 = np.einsum("ic,ic->c", V, KV)
             dist = np.empty((m, k))
             for c in range(k):
-                mask = (labels == c) & active
-                Wc = wf[mask].sum()
-                if Wc <= 0:                      # empty cluster: re-seed on a random active point
+                if Wc[c] <= 0:                   # empty cluster: re-seed on a random active point
                     far = int(rng.choice(np.flatnonzero(active)))
                     dist[:, c] = diag + diag[far] - 2 * K[:, far]
-                    continue
-                v = wf[mask]
-                t2 = K[:, mask] @ v / Wc
-                t3 = v @ K[np.ix_(mask, mask)] @ v / Wc ** 2
-                dist[:, c] = diag - 2 * t2 + t3
+                else:
+                    dist[:, c] = diag - 2 * KV[:, c] / Wc[c] + t3[c] / Wc[c] ** 2
             new = dist.argmin(1)
             if np.array_equal(new, labels):
                 break

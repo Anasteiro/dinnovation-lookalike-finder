@@ -43,17 +43,24 @@ def _num(s: pd.Series) -> pd.Series:
 
 
 def _parse_dates(s: pd.Series) -> pd.Series:
-    """Try several formats, keep whichever parses most values."""
+    """Try several formats, keep whichever parses most values. Parsed on the DISTINCT strings (there are only ~2,000 days
+    in the data, not 64,000 rows) and mapped back: same result, ~20x less work."""
+    counts = s.value_counts()
+    uniq = pd.Series(counts.index, index=counts.index)
     best, best_rate = None, -1.0
     for fmt in (None, "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S"):
         try:
-            p = pd.to_datetime(s, format=fmt, errors="coerce")
+            p = pd.to_datetime(uniq, format=fmt, errors="coerce")
         except Exception:
             continue
-        rate = p.notna().mean()
+        rate = float((p.notna() * counts.reindex(p.index)).sum()) / max(int(s.notna().sum()), 1) if len(counts) else 0.0
         if rate > best_rate:
             best, best_rate = p, rate
-    return best
+        if best_rate >= 0.999:
+            break
+    if best is None:
+        return pd.to_datetime(s, errors="coerce")
+    return s.map(dict(zip(best.index, best.values))).astype("datetime64[ns]")
 
 
 def find_file(data_dir: Path, name: str) -> Path:
@@ -65,7 +72,9 @@ def find_file(data_dir: Path, name: str) -> Path:
 
 
 def atype_norm(s: pd.Series) -> pd.Series:
-    t = s.fillna("").map(strip_accents).str.lower().str.strip()
+    s = s.fillna("")
+    lut = {u: strip_accents(u).lower().strip() for u in s.unique()}          # a handful of distinct values, not 64,000 rows
+    t = s.map(lut)
     out = pd.Series("secondary", index=s.index)
     out[t.str.startswith("κυρ") | t.str.startswith("prim") | t.str.startswith("main")] = "primary"
     out[t.str.startswith("βοηθ") | t.str.startswith("aux")] = "auxiliary"

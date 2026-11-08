@@ -142,8 +142,17 @@ def run_analysis(ctx, out_dir: Path | None = None, k=None, B=30, revenue_mode="l
 
     progress("statistics")
     t = time.time()
-    F, names, flabels = (None, None, None) if rank_only else stats.build_feature_matrix(comp, ctx.activity, ctx.kad_desc)
-    is_client = comp["vat"].isin(set(s["vat"])).to_numpy()
+    # market-only work cached on the model (never depends on the client list): feature matrix + VAT lookup
+    mk = getattr(ctx.model, "_market_cache", None)
+    if mk is None or mk["n"] != n:
+        codes, uniq = pd.factorize(comp["vat"])
+        mk = {"n": n, "fm": None, "vat_codes": codes, "vat_index": pd.Index(uniq)}
+        ctx.model._market_cache = mk
+    if not rank_only and mk["fm"] is None:
+        mk["fm"] = stats.build_feature_matrix(comp, ctx.activity, ctx.kad_desc)
+    F, names, flabels = (None, None, None) if rank_only else mk["fm"]
+    cl_codes = mk["vat_index"].get_indexer(pd.Index(s["vat"].dropna().unique()))
+    is_client = np.isin(mk["vat_codes"], cl_codes[cl_codes >= 0])
     bg_pos = np.flatnonzero(~is_client)
     timings["features_s"] = round(time.time() - t, 2)
 
