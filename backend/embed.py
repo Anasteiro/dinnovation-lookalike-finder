@@ -35,10 +35,11 @@ def _st(texts, name, batch_size=64):
     return np.asarray(emb, dtype=np.float32)
 
 
-def embed_texts(texts: list[str], backend: str = "tfidf", use_cache: bool = True) -> np.ndarray:
+def embed_texts(texts: list[str], backend: str = "tfidf", use_cache: bool = True, force: bool = False) -> np.ndarray:
+    """force=True recomputes and refreshes the cache (the comparison needs a real timing)."""
     key = hashlib.md5((backend + "\n" + "\n".join(texts)).encode("utf-8")).hexdigest()[:16]
     path = CACHE_DIR / f"emb_{key}.npy"
-    if use_cache and path.exists():
+    if use_cache and not force and path.exists():
         return np.load(path)
     if backend == "tfidf":
         E = _tfidf(texts)

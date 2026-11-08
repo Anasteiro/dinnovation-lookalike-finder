@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="el"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ανατροφοδότηση και αυστηρός έλεγχος</title><link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#17202e;--mute:#5c6778;--line:#dfe3ea;--brand:#2f6fed;--good:#12795a;--bad:#b3362e;--soft:#eef3fe}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "IBM Plex Sans",system-ui,"Segoe UI",Arial,sans-serif}
+a{color:var(--brand)}header{background:var(--card);border-bottom:1px solid var(--line);padding:14px 24px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+h1{font-size:18px;margin:0}h2{font-size:15px;margin:22px 0 8px}main{max-width:1120px;margin:0 auto;padding:18px 24px 60px}
+nav{display:flex;gap:4px;margin-left:auto}button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:5px 10px;border-radius:7px}
+button:hover{border-color:var(--brand)}button:disabled{opacity:.5;cursor:default}button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+nav button[aria-selected=true]{background:var(--brand);border-color:var(--brand);color:#fff}
+.bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.stat b{font-size:18px;font-variant-numeric:tabular-nums}.stat{color:var(--mute);font-size:13px}.grow{flex:1}
+.note{color:var(--mute);font-size:13px;margin:8px 0 14px}
+.item{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin:8px 0;display:grid;grid-template-columns:54px 1fr 74px;gap:4px 12px}
+.pos{font-weight:600;font-variant-numeric:tabular-nums;font-size:17px}.name{font-weight:600}.meta{color:var(--mute);font-size:13px}
+.mv{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}.up{color:var(--good)}.dn{color:var(--bad)}.ex{grid-column:2/4;font-size:13px;background:var(--soft);padding:4px 8px;border-radius:6px}
+.acts{grid-column:2/4;display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.ok{border-color:#a9d8c7;color:var(--good)}.no{border-color:#ecc0bc;color:var(--bad)}
+input[type=search]{font:inherit;padding:5px 9px;border:1px solid var(--line);border-radius:7px;min-width:220px}
+table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;font-size:14px}th:first-child,td:first-child{text-align:left}th{color:var(--mute);font-weight:500;background:#fafbfc}
+.pass{color:var(--good);font-weight:600}.fail{color:var(--bad);font-weight:600}#msg{min-height:20px;font-size:13px;color:var(--mute);margin-top:8px}
+.hide{display:none}.prog{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:10px 0 6px}.prog i{display:block;height:100%;background:var(--brand);transition:width .25s}#plog,.plog{font-size:13px;color:var(--mute);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:8px 0;max-height:190px;overflow:auto}#plog div,.plog div{padding:1px 0}.ins{background:var(--card);border:1px solid var(--line);border-left-width:4px;border-radius:8px;padding:7px 11px;margin:6px 0}.ins.good{border-left-color:var(--good)}.ins.warn{border-left-color:#c98a12}.ins.bad{border-left-color:var(--bad)}.ins.info{border-left-color:var(--brand)}footer{color:var(--mute);font-size:12px;margin-top:26px}.pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px}
+@media(max-width:640px){.item{grid-template-columns:44px 1fr}.mv{grid-column:2;text-align:left}.ex,.acts{grid-column:1/3}}
+</style></head><body>
+<header><h1>Ανατροφοδότηση και αυστηρός έλεγχος</h1><a href="./">← Επιστροφή στην ανάλυση</a>
+<nav role="tablist"><button id="t1" role="tab" aria-selected="true">Μάθε από εμένα</button><button id="t2" role="tab" aria-selected="false">Αυστηρός έλεγχος</button><button id="t3" role="tab" aria-selected="false">Σύγκριση embeddings</button></nav></header>
+<main>
+<div id="nojob" class="hide note">Δεν υπάρχει ολοκληρωμένη ανάλυση. Τρέξτε πρώτα μια ανάλυση από την <a href="./">αρχική σελίδα</a>.</div>
+<section id="p1">
+<div class="bar"><div class="stat"><b id="nA">0</b> εγκρίθηκαν</div><div class="stat"><b id="nR">0</b> απορρίφθηκαν</div><div class="stat"><b id="nS">0</b> παραλείφθηκαν</div>
+<div class="stat">Επιρροή στη λίστα <b id="al">0%</b></div><div class="grow"></div>
+<label class="stat">Ένταση <input id="st" type="range" min="0" max="1" step="0.1" value="1" aria-label="Ένταση ανατροφοδότησης"></label>
+<button id="undo">Αναίρεση</button><button id="reset">Επαναφορά</button><button id="val">Βοηθά η ανατροφοδότηση;</button></div>
+<div id="msg" role="status" aria-live="polite"></div>
+<p class="note">Κάθε επισήμανση αλλάζει τη σειρά σε περίπου ένα δευτερόλεπτο, τοπικά. Οι λόγοι απόρριψης έχουν σημασία: το «Εκτός περιοχής» κατεβάζει όσες είναι κοντά, όχι όσες έχουν ίδιο κλάδο. Τα παραδοτέα αρχεία (lookalikes.csv) δεν αλλάζουν.
+ Εξαγωγή: <a id="e1" href="#">λίστα με ανατροφοδότηση</a> · <a id="e2" href="#">ημερολόγιο επισημάνσεων</a></p>
+<div class="bar"><input id="q" type="search" placeholder="Αναζήτηση επωνυμίας, δήμου, ΚΑΔ" aria-label="Αναζήτηση"><div class="grow"></div><span class="stat" id="tot"></span></div>
+<div id="list"></div><div class="pager"><button id="prev">← Προηγούμενα</button><span class="stat" id="pg"></span><button id="next">Επόμενα →</button></div>
+</section>
+<section id="p2" class="hide">
+<div class="bar"><button id="run">Γρήγορος έλεγχος</button><button id="runf">Πλήρης έλεγχος</button><span class="stat" id="hs"></span></div>
+<p class="note">Οι πελάτες χωρίζονται με σταθερό κατακερματισμό του ΑΦΜ σε τρία ξένα μέρη: εκπαίδευση, ανατροφοδότηση και κλειδωμένο τεστ. Τα ποσοστά είναι Recall@k: πόσοι κρυμμένοι πελάτες βρέθηκαν στις κορυφαίες k προτάσεις.</p>
+<div id="pbox" class="hide"><div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="pbar"><i id="pfill" style="width:0"></i></div><div class="stat" id="pmsg" role="status" aria-live="polite"></div><div id="plog"></div></div>
+<div id="ins"></div><div id="hr"></div></section>
+<section id="p3" class="hide">
+<div class="bar"><button id="ebrun">Εκτέλεση σύγκρισης</button><span class="stat" id="ebs"></span></div>
+<p class="note">Υποχρεωτικός έλεγχος της ενότητας 5.3 του brief. Τρία μοντέλα, οι ίδιοι διαχωρισμοί, ίδιο pipeline. Η πρώτη εκτέλεση κατεβάζει τα νευρωνικά μοντέλα και παίρνει αρκετά λεπτά.</p>
+<div id="ebmiss" class="ins bad hide"></div>
+<div id="ebbox" class="hide"><div class="prog"><i id="ebfill" style="width:0"></i></div><div class="stat" id="ebmsg" role="status" aria-live="polite"></div><div id="eblog" class="plog"></div></div>
+<div id="ebins"></div><div id="ebr"></div></section>
+<footer>Στοιχεία επιχειρήσεων: ΓΕΜΗ Open Data. Στίγματα GPS: γεωκωδικοποίηση με δεδομένα © OpenStreetMap contributors (ODbL).</footer></main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);let job=new URLSearchParams(location.search).get("job"),off=0,lim=20,reasons=[],qT;
+const el=(t,c,x)=>{const n=document.createElement(t);if(c)n.className=c;if(x!=null)n.textContent=x;return n};  // textContent only: business names are data, never HTML
+async function api(p,o){const r=await fetch(p,o);if(!r.ok){let d=r.statusText;try{d=(await r.json()).detail||d}catch(e){}throw new Error(d)}return r.json()}
+const post=(p,b)=>api(p,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b||{})});
+const say=t=>$("msg").textContent=t;let fb="";
+function head(s){$("nA").textContent=s.counts.accept;$("nR").textContent=s.counts.reject;$("nS").textContent=s.counts.skip;$("al").textContent=Math.round(100*s.alpha)+"%";$("undo").disabled=!s.can_undo;$("st").value=s.strength}
+function row(it){const d=el("article","item");d.append(el("div","pos",it.rank));const b=el("div");b.append(el("div","name",it.name||"(χωρίς επωνυμία)"));b.append(el("div","meta",[it.tier,it.primary_kad_label,it.municipality,it.legal_type,it.founded].filter(Boolean).join(" · ")));d.append(b);
+ d.append(el("div","mv "+(it.moved>0?"up":it.moved<0?"dn":""),it.moved>0?"▲ "+it.moved:it.moved<0?"▼ "+(-it.moved):"="));
+ if(it.explanation)d.append(el("div","ex",it.explanation));const a=el("div","acts");
+ for(const r of reasons){const c=el("button",r.group==="accept"?"ok":r.group==="reject"?"no":"",r.label);c.onclick=()=>mark(it.company_id,r.id,it.name,r.label,c);a.append(c)}d.append(a);return d}
+async function load(){const q=$("q").value.trim();const u=fb+"?limit="+lim+"&offset="+off+(q?"&q="+encodeURIComponent(q):"");const s=await api(u);reasons=s.reasons;head(s);$("tot").textContent=s.total+" προτάσεις";$("list").replaceChildren(...s.items.map(row));$("pg").textContent=s.total?(off+1)+"-"+Math.min(off+lim,s.total)+" από "+s.total:"";$("prev").disabled=off===0;$("next").disabled=off+lim>=s.total}
+async function act(f,done){try{document.body.style.cursor="progress";say("Ενημέρωση λίστας…");await f();say(done||"");await load()}catch(e){say("Σφάλμα: "+e.message)}finally{document.body.style.cursor=""}}
+function imp(x){if(!x)return"";if(!x.entered&&!x.left&&!x.top_riser)return" Η σειρά των υπόλοιπων δεν άλλαξε.";return" Στις πρώτες "+x.top+": μπήκαν "+x.entered+", βγήκαν "+x.left+"."+(x.top_riser?" Μεγαλύτερη άνοδος: «"+x.top_riser+"» (+"+x.top_riser_moved+").":"")}
+async function mark(id,r,n,l,btn){btn.disabled=true;let m="";await act(async()=>{const s=await post(fb,{company_id:id,reason:r});m=imp(s.impact)},"");say("«"+(n||id)+"»: "+l+"."+m)}
+$("undo").onclick=()=>act(()=>post(fb+"/undo"),"Αναιρέθηκε η τελευταία επισήμανση.");
+$("reset").onclick=()=>{if(confirm("Να διαγραφούν όλες οι επισημάνσεις;"))act(()=>post(fb+"/reset"),"Η λίστα επέστρεψε στη σειρά του μοντέλου.")};
+$("st").onchange=e=>act(()=>post(fb,{strength:+e.target.value}),"Η ένταση άλλαξε.");
+$("val").onclick=async()=>{try{say("Έλεγχος στις επισημάνσεις σας…");const v=await post(fb+"/validate");say(v.status==="too_few"?"Χρειάζονται τουλάχιστον "+v.needed_each+" εγκρίσεις και "+v.needed_each+" απορρίψεις ("+v.accepted+" / "+v.rejected+" τώρα).":"Διαχωρισμός κρυμμένων επισημάνσεων: μοντέλο "+v.auc_model+", με ανατροφοδότηση "+v.auc_feedback+" (0,5 = τύχη). "+(v.helps?"Η ανατροφοδότηση βοηθά.":"Δεν φαίνεται βελτίωση με αυτές τις επισημάνσεις."))}catch(e){say("Σφάλμα: "+e.message)}};
+$("q").oninput=()=>{clearTimeout(qT);qT=setTimeout(()=>{off=0;load().catch(e=>say(e.message))},250)};
+$("prev").onclick=()=>{off=Math.max(0,off-lim);load()};$("next").onclick=()=>{off+=lim;load()};
+function tab(n){for(const[i,p]of[[1,"p1"],[2,"p2"],[3,"p3"]]){$("t"+i).setAttribute("aria-selected",i===n);$(p).classList.toggle("hide",i!==n)}if(n===2)poll(true);if(n===3)ebPoll()}$("t1").onclick=()=>tab(1);$("t2").onclick=()=>tab(2);$("t3").onclick=()=>tab(3);
+const P=x=>x==null?"-":(100*x).toFixed(1).replace(".",",")+"%";
+function table(cap,hd,rows){const w=el("div");w.append(el("h2",null,cap));const t=el("table"),h=el("tr");hd.forEach(x=>h.append(el("th",null,x)));t.append(h);rows.forEach(r=>{const tr=el("tr");r.forEach(x=>tr.append(el("td",null,x)));t.append(tr)});w.append(t);return w}
+function insightsView(a){$("ins").replaceChildren(...(a||[]).map(x=>el("div","ins "+x.level,x.text)))}
+function show(r){insightsView(r.insights);const o=$("hr");o.replaceChildren();const L=r.locked;if(L)o.append(table("Κλειδωμένο τεστ · διαχωρισμός "+r.split.fingerprint+" · "+L.n_train+" πελάτες για μάθηση, "+L.n_test+" κρυμμένοι",["","Recall@500","Recall@2000"],[["Η μέθοδός μας",P(L["product@500"])+" ["+P(L["product@500_ci95"][0])+" έως "+P(L["product@500_ci95"][1])+"]",P(L["product@2000"])+" ["+P(L["product@2000_ci95"][0])+" έως "+P(L["product@2000_ci95"][1])+"]"],["Βάση (ίδιος κύριος ΚΑΔ)",P(L["baseline@500"]),P(L["baseline@2000"])],["Τύχη",P(L["chance@500"]),P(L["chance@2000"])]]));
+ const R=r.repeated;if(R)o.append(table("Άλλοι διαχωρισμοί ("+R.repeats+")",["","Recall@500","Recall@2000"],[["Η μέθοδός μας (μέσος)",P(R["product@500"]),P(R["product@2000"])],["Εύρος",P(R["min@500"])+" έως "+P(R["max@500"]),P(R["min@2000"])+" έως "+P(R["max@2000"])],["Βάση (μέσος)",P(R["baseline@500"]),P(R["baseline@2000"])],["Νίκες έναντι βάσης",R["wins@500"]+"/"+R.repeats,R["wins@2000"]+"/"+R.repeats]]));
+ if(r.generalisation&&r.generalisation.length)o.append(table("Σκόπιμα δύσκολοι διαχωρισμοί",["Τι κρύφτηκε","Κρυμμένοι","R@500","R@2000","Βάση R@2000","Τύχη R@2000"],r.generalisation.filter(g=>!g.skipped).map(g=>[g.name,g.n_test,P(g["product@500"]),P(g["product@2000"]),P(g["baseline@2000"]),P(g["chance@2000"])])));
+ if(r.canaries){const c=el("div");c.append(el("h2",null,"Έλεγχοι του ίδιου του ελέγχου"));r.canaries.forEach(k=>{const l=el("div");l.append(el("span",k.passed?"pass":"fail",k.passed?"ΟΚ ":"ΑΠΟΤΥΧΙΑ "));l.append(document.createTextNode(k.name+(k.observed!=null?" (μετρήθηκε "+k.observed+", αναμενόμενο "+k.expected+")":"")));c.append(l)});o.append(c)}
+ if(r.feedback_blind){const f=r.feedback_blind[0];o.append(table("Ανατροφοδότηση με «τυφλό» χρήστη · "+f.reviewed+" έλεγχοι, "+f.accepted+" εγκρίσεις",["","Recall@500","Recall@2000"],[["Χωρίς",P(f["without@500"]),P(f["without@2000"])],["Με ανατροφοδότηση",P(f["with@500"]),P(f["with@2000"])]]))}
+ if(r.intent&&r.intent.length)o.append(table("Προσαρμογή σε πρόθεση · "+r.intent[0].labels+" επισημάνσεις (προσομοίωση): μερίδιο των επόμενων 100 που ταιριάζουν",["Πρόθεση","Μόνο μοντέλο","Με απλή απόρριψη","Με λόγο απόρριψης"],r.intent.map(x=>[x.intent,P(x.model_p100),(x.generic_p100==null?"-":P(x.generic_p100)),P(x.reasons_p100)])));
+ if(r.note)o.append(el("p","note",r.note))}
+function secs(x){return x==null?"":x<60?Math.ceil(x)+" δευτ.":Math.floor(x/60)+" λεπτά "+Math.ceil(x%60)+" δευτ."}
+function progressView(r){$("pbox").classList.remove("hide");$("pfill").style.width=(r.pct||0)+"%";$("pbar").setAttribute("aria-valuenow",r.pct||0);$("pmsg").textContent=(r.message||"Ξεκινά…")+" · "+(r.done||0)+"/"+(r.total||"?")+" βήματα · "+(r.pct||0)+"%"+(r.eta_s!=null?" · απομένουν περίπου "+secs(r.eta_s):"");$("plog").replaceChildren(...(r.log||[]).slice().reverse().map(x=>el("div",null,"✓ "+x)))}
+let pollT;async function poll(once){clearTimeout(pollT);try{const r=await api("/api/jobs/"+encodeURIComponent(job)+"/hardsplit");if(r.status==="done"){$("pfill").style.width="100%";$("pbox").classList.add("hide");$("hs").textContent="Ολοκληρώθηκε σε "+secs(r.seconds)+(r.quick?" (γρήγορος έλεγχος)":" (πλήρης έλεγχος)");show(r);btns(false)}else if(r.status==="running"){$("hs").textContent="Εκτελείται";btns(true);progressView(r);if(r.partial)show(r.partial);pollT=setTimeout(poll,500)}else if(r.status==="error"){$("hs").textContent=r.message;$("pbox").classList.add("hide");btns(false)}else if(!once)btns(false)}catch(e){$("hs").textContent=e.message}}
+let ebT;function ebShow(r){$("ebins").replaceChildren(...(r.insights||[]).map(x=>el("div","ins "+x.level,x.text)));const o=$("ebr");o.replaceChildren();if(!r.models)return;const v=r.verdicts||{};
+ o.append(table("Αποτελέσματα · "+r.repeats+" διαχωρισμοί",["Μοντέλο","Ελληνικά: ίδια κλάση ΚΑΔ","Recall@500","Recall@2000","Προφίλ","Χρόνος (δ)","Μνήμη (MB)","Άδεια","Προέλευση","Συμπέρασμα"],r.models.map(m=>m.status==="done"?[m.name,P(m.kad_neighbour_p5),P(m["product@500"]),P(m["product@2000"]),m.profiles,m.embed_s,m.peak_mb==null?"-":m.peak_mb,m.licence,m.origin,v[m.backend]||"Σημείο αναφοράς"]:[m.name,"δεν εκτελέστηκε","-","-","-","-","-",m.licence,m.origin,"-"])))}
+async function ebPoll(){clearTimeout(ebT);try{const r=await api("/api/embedbench");$("ebs").textContent="Ενεργό στην εφαρμογή: "+r.active+(r.active_warning?" · "+r.active_warning:"");const miss=$("ebmiss");miss.classList.toggle("hide",r.preflight.ready);miss.textContent=r.preflight.fix||"";$("ebrun").disabled=r.status==="running"||!r.preflight.ready;
+ if(r.status==="running"){$("ebbox").classList.remove("hide");$("ebfill").style.width=(r.pct||0)+"%";$("ebmsg").textContent=(r.message||"")+" · "+(r.done||0)+"/"+(r.total||"?")+" · "+(r.pct||0)+"%"+(r.eta_s!=null?" · απομένουν περίπου "+secs(r.eta_s):"");$("eblog").replaceChildren(...(r.log||[]).slice().reverse().map(x=>el("div",null,"✓ "+x)));ebT=setTimeout(ebPoll,800)}else{$("ebbox").classList.add("hide");if(r.status==="error"){$("ebins").replaceChildren(el("div","ins bad",r.message))}else if(r.status==="done")ebShow(r);else $("ebins").replaceChildren(el("div","ins warn","Η σύγκριση δεν έχει εκτελεστεί ακόμη."))}}catch(e){$("ebs").textContent=e.message}}
+$("ebrun").onclick=async()=>{const f=new FormData();if(job)f.append("job",job);try{await api("/api/embedbench",{method:"POST",body:f});ebPoll()}catch(e){$("ebins").replaceChildren(el("div","ins bad",e.message))}};
+function btns(b){$("run").disabled=b;$("runf").disabled=b}
+function start(q){const f=new FormData();f.append("quick",q?"true":"false");btns(true);api("/api/jobs/"+encodeURIComponent(job)+"/hardsplit",{method:"POST",body:f}).then(()=>poll()).catch(e=>{$("hs").textContent=e.message;btns(false)})}$("run").onclick=()=>start(true);$("runf").onclick=()=>start(false);
+(async()=>{try{if(!job)job=(await api("/api/jobs/latest")).job_id}catch(e){$("nojob").classList.remove("hide");$("p1").classList.add("hide");tab(3);return}
+ const b="/api/export/"+encodeURIComponent(job)+"/";$("e1").href=b+"lookalikes_feedback.csv";$("e2").href=b+"feedback_log.csv";fb="/api/jobs/"+encodeURIComponent(job)+"/feedback";await load()})().catch(e=>say("Σφάλμα: "+e.message));
+</script></body></html>

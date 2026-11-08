@@ -40,3 +40,14 @@ Everything runs locally. No endpoint calls an external AI service. CORS accepts 
 * If `description_is_ai` is false the text is a deterministic template: do not call it AI-generated.
 * Never invent numbers. Every figure shown must come from these fields.
 * Never show a creditworthiness / solvency style score.
+
+
+## Feedback re-ranking and hard split (v30)
+- `GET /api/jobs/latest` -> `{job_id}` of the newest finished analysis
+- `GET /api/jobs/{id}/feedback?limit&offset&q` -> state + current list (`rank`, `model_rank`, `moved`, `explanation`, ...)
+- `POST /api/jobs/{id}/feedback` body `{company_id, reason}` or `{labels:[...]}` (all-or-nothing, max 5000), optional `strength` 0..1. Reasons: good_fit, already_client, wrong_sector, wrong_area, wrong_legal, not_fit, closed, not_now
+- `POST /api/jobs/{id}/feedback/undo`, `/feedback/reset`, `/feedback/validate`; `GET /api/jobs/{id}/feedback/queue?n&explore`
+- `POST /api/jobs/{id}/hardsplit` form `quick=true|false`, then poll `GET /api/jobs/{id}/hardsplit`
+- Exports: `lookalikes_feedback.csv`, `feedback_log.csv`. lookalikes.csv is never changed by feedback.
+
+`/api/lookalikes` items carry `tier` (priority band) and `candidates`; `top_pct` was removed in v30.2. `GET /api/jobs/{id}/hardsplit` while running returns `pct`, `done`, `total`, `eta_s`, `message`, `log`, `partial`. `POST .../feedback` returns `impact`.

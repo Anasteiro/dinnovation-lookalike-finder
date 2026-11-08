@@ -74,13 +74,17 @@ def dense_features(model, weights=None, dims=96, seed=0):
     return (Z - Z.mean(0)) / (Z.std(0) + 1e-6)
 
 
-def pu_scores(Z, pos, w, l2=5e-3, boost=8.0, steps=150):
+def pu_scores(Z, pos, w, l2=5e-3, boost=8.0, steps=150, neg=None, neg_w=0.0):
     """Positive-Unlabeled logistic regression: clients = positives, rest of the market = unlabeled.
-    Plain numpy (Adam), no PyTorch needed; same loss as the second developer's engine."""
+    Plain numpy (Adam), no PyTorch needed; same loss as the second developer's engine.
+    neg / neg_w: optional rows a person has confirmed are NOT a fit; they keep label 0 and just count `neg_w` times more
+    (feedback re-ranking). With neg=None the result is bit-for-bit the plain PU score."""
     Z = np.asarray(Z, np.float32)                 # float32: about twice as fast on a laptop CPU
     n, d = Z.shape
     y = np.zeros(n, np.float32); y[pos] = 1
     sw = np.ones(n, np.float32); sw[pos] = boost * np.asarray(w, np.float32)
+    if neg is not None and len(neg):
+        sw[neg] = neg_w
     W = np.zeros(d, np.float32); b = np.float32(-3.0)
     mW, vW, mb, vb = np.zeros(d, np.float32), np.zeros(d, np.float32), 0.0, 0.0
     for t in range(1, steps + 1):

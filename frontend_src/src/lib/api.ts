@@ -18,7 +18,7 @@ export type Dataset = {
   execution_seconds: number; source: string;
 };
 export type AnalysisResult = { job_id: string; dataset: Dataset; meta: Record<string, unknown>; profiles: Profile[] };
-export type Lookalike = { top_pct?: number; rank: number; company_id: string | number; profile_id: string; score: number; reason: string; name: string; municipality: string | null; prefecture: string | null; legal_type: string | null; primary_kad_label: string | null; founded: string | number | null; lat: number | null; lon: number | null; clarity?: number | null; clarity_level?: string | null; declared_other_kads?: number | null; unrelated_kads?: number | null };
+export type Lookalike = { tier?: string; candidates?: number; rank: number; company_id: string | number; profile_id: string; score: number; reason: string; name: string; municipality: string | null; prefecture: string | null; legal_type: string | null; primary_kad_label: string | null; founded: string | number | null; lat: number | null; lon: number | null; clarity?: number | null; clarity_level?: string | null; declared_other_kads?: number | null; unrelated_kads?: number | null };
 export type LookalikePage = { total: number; items: Lookalike[] };
 export type JobEvent = { t: number; step: string; message?: string; detail?: string; error?: string; [key: string]: unknown };
 export type ExportFile = "profiles.json" | "assignments.csv" | "lookalikes.csv" | "lookalikes_global.csv" | "lookalikes_by_profile.csv" | "activity_clarity.csv" | "refined_lookalikes.csv";
@@ -212,9 +212,3 @@ export function subscribeJob(job: string, handlers: { event: (event: JobEvent) =
   };
   return close;
 }
-/** "Top 0,1%" style position of a business in the whole market (rank / number of candidate businesses). */
-export const topPct = (x?: number | null) => {
-  if (x === undefined || x === null || !Number.isFinite(x)) return "—";
-  const v = Math.max(x * 100, 0.01);
-  return `Top ${v < 1 ? v.toLocaleString("el-GR", { maximumFractionDigits: 2 }) : v.toLocaleString("el-GR", { maximumFractionDigits: 1 })}%`;
-};

@@ -8,6 +8,7 @@ pyzipper>=0.3.6
 statsmodels>=0.14
 # Local ML (embeddings). On the RTX 3060 install the CUDA build of torch first:
 #   pip install torch --index-url https://download.pytorch.org/whl/cu121
+torch>=2.6
 sentence-transformers>=3.0
 # Later parts
 fastapi>=0.110

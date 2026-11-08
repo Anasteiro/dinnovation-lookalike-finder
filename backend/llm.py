@@ -36,6 +36,9 @@ def build_facts(profile: dict, max_features=6) -> list[dict]:
     facts.append(t)
     facts.append(f"Σταθερότητα της ομάδας σε επαναδειγματοληψία (πόσο συχνά ξαναβρίσκεται η ίδια ομάδα πελατών): "
                  f"{profile['stability']:.0%}.")
+    types = profile.get("business_types") or []
+    if types:                                # what the clients are comes first in every description
+        facts.append("Τύπος επιχειρήσεων του προφίλ: " + ", ".join(f"{t['label']} {t['share']:.0%}" for t in types[:3] if t["share"] >= 0.05) + ".")
     for f in profile.get("features", [])[:max_features]:
         facts.append(f"{f['label']}: {f['share_in_profile']:.0%} των πελατών του προφίλ έναντι "
                      f"{f['share_in_universe']:.0%} της αγοράς (φορές πάνω από το αναμενόμενο: {f['shrunk_lift']:.1f}).")

@@ -25,14 +25,25 @@ class Context:
     clarity: pd.DataFrame | None = None      # Activity Clarity Index per business (row order = companies)
     factors: pd.DataFrame | None = None      # external factors per business (by municipality), see external.py
     factor_catalog: list | None = None
+    embed_warning: str | None = None         # set when the requested embedding model could not be used
 
 
-def build_base(data_dir: Path, embed="tfidf", drop_other=None) -> Context:
+def build_base(data_dir: Path, embed=C.DEFAULT_EMBED, drop_other=None, fallback=False) -> Context:
+    """fallback=True (the app): if the neural model cannot be loaded, continue with TF-IDF and say so everywhere.
+    fallback=False (measurements): stop, so that a number is never attributed to a model that did not run."""
     u = I.load_universe(data_dir)
     comp, act, desc = u["companies"], u["activity"], u["kad_desc"]
     kad_ids = sorted(set(act["activity_id"].dropna()))
     texts = [desc.get(k) or k for k in kad_ids]
-    Emb = E.embed_texts(texts, embed)
+    warning = None
+    try:
+        Emb = E.embed_texts(texts, embed)
+    except Exception as e:
+        if not fallback or embed == "tfidf":
+            raise
+        warning = f"Το μοντέλο {embed} δεν φορτώθηκε ({type(e).__name__}). Χρησιμοποιείται TF-IDF. Τρέξτε: python run.py getmodel"
+        print("ΠΡΟΣΟΧΗ:", warning, flush=True)
+        embed, Emb = "tfidf", E.embed_texts(texts, "tfidf")
     W = F.build_kad_weights(act, comp["company_id"], kad_ids, drop_other=drop_other, emb=Emb if C.NOISE_DAMP else None)
     blocks = {
         "activity": F.activity_block(W, Emb),
@@ -45,7 +56,7 @@ def build_base(data_dir: Path, embed="tfidf", drop_other=None) -> Context:
     pk = F.primary_kad(act, comp["company_id"])
     clar = K.compute(act, comp["company_id"], kad_ids, Emb)
     fac, cat = X.build(comp, data_dir)
-    return Context(comp, act, desc, None, None, None, pk, F.BlockModel(blocks), W, kad_ids, embed, clar, fac, cat)
+    return Context(comp, act, desc, None, None, None, pk, F.BlockModel(blocks), W, kad_ids, embed, clar, fac, cat, warning)
 
 
 def attach_clients(base: Context, clients: pd.DataFrame, match_mode="split") -> Context:
@@ -53,8 +64,8 @@ def attach_clients(base: Context, clients: pd.DataFrame, match_mode="split") -> 
     return dataclasses.replace(base, clients=clients, client_shops=shops, match_stats=stats)
 
 
-def build_context(data_dir: Path, clients_xlsx: Path | None = None, embed="tfidf", match_mode="split",
-                  drop_other=None) -> Context:
-    base = build_base(data_dir, embed, drop_other)
+def build_context(data_dir: Path, clients_xlsx: Path | None = None, embed=C.DEFAULT_EMBED, match_mode="split",
+                  drop_other=None, fallback=False) -> Context:
+    base = build_base(data_dir, embed, drop_other, fallback)
     xlsx = clients_xlsx or I.find_file(data_dir, "*Pelatologio*.xlsx")
     return attach_clients(base, I.load_clients(xlsx), match_mode)

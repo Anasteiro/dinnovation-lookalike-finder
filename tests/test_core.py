@@ -70,7 +70,7 @@ def test_kernel_kmeans_separates_two_blocks():
 def test_full_analysis_outputs(synth, tmp_path):
     from backend.pipeline import build_context
     from backend.analysis import run_analysis
-    ctx = build_context(synth)
+    ctx = build_context(synth, embed="tfidf")
     out = run_analysis(ctx, tmp_path, B=5, top_per_profile=300)
     a = pd.read_csv(tmp_path / "assignments.csv"); l = pd.read_csv(tmp_path / "lookalikes.csv")
     assert list(a.columns) == ["company_id", "profile_id", "score"] and len(a) == len(ctx.companies)

@@ -13,12 +13,18 @@ if errorlevel 1 (
 if not exist .venv py -3.12 -m venv .venv
 call .venv\Scripts\activate
 python -m pip install --upgrade pip
-pip install -r requirements-light.txt
+pip install -r requirements.txt
 if errorlevel 1 (
   echo pip install failed - see the message above.
   pause
   exit /b 1
 )
+echo Downloading the embedding model and preparing it ^(once, a few minutes^)...
+python run.py getmodel
+if errorlevel 1 echo WARNING: the embedding model could not be prepared. The app will work with TF-IDF and will say so.
+echo Comparing the embedding models ^(mandatory, brief section 5.3, several minutes^)...
+python run.py embedbench --data data
+if errorlevel 1 echo WARNING: the embedding comparison did not finish. Run compare_embeddings.bat and read the message.
 where ollama >nul 2>nul
 if errorlevel 1 (
   echo NOTE: Ollama is not installed, so the AI-written descriptions will be skipped ^(the app still works with automatic text^).

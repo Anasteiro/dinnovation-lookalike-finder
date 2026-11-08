@@ -14,7 +14,7 @@ NOTE = ("Οι υπολογισμοί γίνονται στους δικούς σ
 def run_benchmark(ctx, k: int = 2, repeats: int = 8, seed: int = 321, progress=lambda i, n: None, mult: dict | None = None) -> dict:
     t0 = time.time()
     s = ctx.client_shops
-    w = R.revenue_weights(s["revenue"].to_numpy(), "log")
+    w = R.revenue_weights(s["weight"].to_numpy(float), "log")
     wts = None
     if mult is None:
         Z = R.pu_features(ctx.model, ctx.companies["latitude"], ctx.companies["longitude"])

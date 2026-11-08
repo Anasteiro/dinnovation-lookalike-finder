@@ -79,3 +79,26 @@ def test_chat_panel_renders_text_only():
     from pathlib import Path
     src = Path("frontend_src/src/components/forcecrm/ChatPanel.tsx").read_text(encoding="utf-8")
     assert "dangerouslySetInnerHTML" not in src and "innerHTML" not in src
+
+
+# ---- v29.2 regressions: no false refusals for questions about the data, and refusals for judgements about businesses
+@pytest.mark.parametrize("q", ["Ποιες επιχειρήσεις έχουν ύποπτο θόρυβο ΚΑΔ;", "Υπάρχουν αρνητικά σημεία στην ανάλυση;",
+                               "Ποιες περιοχές να αποφύγω;", "Είναι αξιόπιστα τα αποτελέσματα;"])
+def test_no_false_trust_refusal(q):
+    assert not CH.trust_judgement(CH.norm(q))
+
+
+@pytest.mark.parametrize("q", ["Είναι απατεώνας η επιχείρηση 123456789;", "Ποιοι πληρώνουν στην ώρα τους;", "Ποιες κάνουν φοροδιαφυγή;",
+                               "Μπορώ να εμπιστευτώ αυτή την επιχείρηση;", "Ποιες επιχειρήσεις να αποφύγω;"])
+def test_trust_judgements_refused(q):
+    assert CH.trust_judgement(CH.norm(q))
+
+
+def test_region_kad_code_and_profile_number_parsing(client, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(CH, "RATE", (10_000, 60.0))
+    jid = client.post("/api/analyze", data={"use_sample": "true", "boot": "3"}).json()["job_id"]
+    assert wait(client, jid)["status"] == "done"
+    ask = lambda q: client.post(f"/api/jobs/{jid}/chat", json={"question": q}).json()
+    assert len(ask("Δείξε προτάσεις του προφίλ 1")["rows"]) == 10                     # "1" is the profile, not a row count
+    assert "Περιφέρεια Αττική" in ask("Δείξε προτάσεις στην Αττική")["text"]
+    assert ask("Ποια είναι η νομική μορφή των πελατών;")["kind"] == "answer"

@@ -116,7 +116,7 @@ def main(argv=None):
     from .pipeline import build_context
     ap = argparse.ArgumentParser(prog="run.py enrich", description="Fetch Google Places details for the best lookalikes (run once, before the demo).")
     ap.add_argument("--data", default=str(C.DATA_DIR))
-    ap.add_argument("--embed", default="tfidf")
+    ap.add_argument("--embed", default=C.DEFAULT_EMBED)
     ap.add_argument("--key", default=os.environ.get("GOOGLE_PLACES_API_KEY", ""), help="or set GOOGLE_PLACES_API_KEY (never stored)")
     ap.add_argument("--top", type=int, default=300, help="how many of the best global lookalikes (default 300)")
     ap.add_argument("--out", default="")

@@ -176,3 +176,38 @@ def test_chat_summary_verifier():
     assert llm_summary(facts, ok("Η αγορά έχει 24.424 επιχειρήσεις και 300 πελάτες.")).startswith("Η αγορά")
     assert llm_summary(facts, ok("Η αγορά έχει 30.000 επιχειρήσεις.")) is None          # invented number
     assert llm_summary(facts, ok("Δείτε https://example.com")) is None                  # link
+
+
+def test_feedback_flow(client):
+    jid = client.post("/api/analyze", data={"use_sample": "true", "boot": "3"}).json()["job_id"]
+    assert wait(client, jid)["status"] == "done"
+    assert client.get("/api/jobs/latest").json()["job_id"] == jid
+    st = client.get(f"/api/jobs/{jid}/feedback", params={"limit": 6}).json()
+    assert st["alpha"] == 0 and st["labelled"] == 0 and all(i["moved"] == 0 for i in st["items"])
+    g = client.get("/api/lookalikes", params={"job": jid, "limit": 6}).json()["items"]
+    assert [i["company_id"] for i in st["items"]] == [str(i["company_id"]) for i in g]    # no labels: the model's list
+    ids = [i["company_id"] for i in st["items"]]
+    assert client.post(f"/api/jobs/{jid}/feedback", json={"company_id": ids[0], "reason": "nonsense"}).status_code == 400
+    assert client.post(f"/api/jobs/{jid}/feedback", json={"company_id": "no-such", "reason": "good_fit"}).status_code == 404
+    bad = client.post(f"/api/jobs/{jid}/feedback", json={"labels": [{"company_id": ids[0], "reason": "good_fit"}, {"company_id": ids[1], "reason": "bad"}]})
+    assert bad.status_code == 400 and client.get(f"/api/jobs/{jid}/feedback").json()["labelled"] == 0     # all or nothing
+    r = client.post(f"/api/jobs/{jid}/feedback", json={"labels": [{"company_id": ids[0], "reason": "good_fit"}, {"company_id": ids[1], "reason": "wrong_area"}, {"company_id": ids[2], "reason": "closed"}]}).json()
+    assert r["counts"] == {"accept": 1, "reject": 1, "skip": 1} and r["alpha"] > 0 and "entered" in r["impact"]
+    after = client.get(f"/api/jobs/{jid}/feedback", params={"limit": 200}).json()
+    assert not set(ids[:3]) & {i["company_id"] for i in after["items"]}
+    assert client.get(f"/api/jobs/{jid}/feedback/queue", params={"n": 5}).json()["items"]
+    assert client.get(f"/api/jobs/{jid}/feedback", params={"q": "(", "limit": 3}).status_code == 200    # search text is never a regex
+    assert client.get(f"/api/export/{jid}/lookalikes_feedback.csv").status_code == 200
+    assert "wrong_area" in client.get(f"/api/export/{jid}/feedback_log.csv").text
+    assert client.post(f"/api/jobs/{jid}/feedback/undo").json()["labelled"] == 2
+    assert client.post(f"/api/jobs/{jid}/feedback/reset").json()["labelled"] == 0
+    assert client.post(f"/api/jobs/{jid}/feedback/validate").json()["status"] == "too_few"
+    back = client.get(f"/api/jobs/{jid}/feedback", params={"limit": 6}).json()
+    assert [i["company_id"] for i in back["items"]] == ids                                                   # reset restores the model's list exactly
+
+
+def test_lookalikes_show_a_band_not_a_market_percentage(client):
+    jid = client.post("/api/analyze", data={"use_sample": "true", "boot": "3"}).json()["job_id"]
+    assert wait(client, jid)["status"] == "done"
+    it = client.get("/api/lookalikes", params={"job": jid, "limit": 2}).json()["items"][0]
+    assert it["tier"] == "Πρώτες 500" and "top_pct" not in it and it["candidates"] > 0

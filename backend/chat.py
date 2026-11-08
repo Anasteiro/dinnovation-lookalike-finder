@@ -29,6 +29,17 @@ STOP = set("""ΠΟΣΕΣ ΠΟΣΟΙ ΠΟΣΑ ΠΟΣΟ ΠΟΣΗ ΠΟΙΕΣ ΠΟΙ
 ΤΙ ΕΝΑ ΜΙΑ ΔΥΟ ΤΡΙΑ ΤΟΠ ΠΑΝΩ ΚΑΤΩ ΜΟΝΟ ΟΛΕΣ ΟΛΑ ΟΛΟΙ ΑΥΤΗ ΑΥΤΟ ΑΥΤΕΣ ΑΥΤΟΙ ΕΔΩ ΕΚΕΙ ΝΑ ΘΑ ΔΕΝ ΜΗΝ ΟΤΙ ΑΝ ΟΜΑΔΑ ΟΜΑΔΕΣ
 ΝΕΕΣ ΝΕΟΙ ΚΑΙΝΟΥΡΙΕΣ ΑΝΑ ΣΕ ΤΑ ΟΙ ΤΟ Η Ο ΤΗΝ ΤΟΝ ΤΙΣ ΤΟΥΣ ΚΑΤΑ ΜΕΤΑ ΠΡΙΝ TOP SHOW ME THE OF IN FOR HOW MANY WHICH WHY BEST""".split())
 
+REGIONS = [  # (stem, display, prefectures). "Αττική" = all 5 Attica prefectures of the register, not only "ΑΤΤΙΚΗΣ"
+    ("ΑΤΤΙΚ", "Αττική", ("ΑΘΗΝΩΝ", "ΑΤΤΙΚΗΣ", "ΑΝΑΤΟΛΙΚΗΣ ΑΤΤΙΚΗΣ", "ΔΥΤΙΚΗΣ ΑΤΤΙΚΗΣ", "ΠΕΙΡΑΙΑ")),
+    ("ΚΡΗΤ", "Κρήτη", ("ΗΡΑΚΛΕΙΟΥ", "ΧΑΝΙΩΝ", "ΡΕΘΥΜΝΗΣ", "ΛΑΣΙΘΙΟΥ")),
+    ("ΠΕΛΟΠΟΝΝΗΣ", "Πελοπόννησος", ("ΑΡΓΟΛΙΔΑΣ", "ΑΡΚΑΔΙΑΣ", "ΚΟΡΙΝΘΙΑΣ", "ΛΑΚΩΝΙΑΣ", "ΜΕΣΣΗΝΙΑΣ")),
+    ("ΘΕΣΣΑΛΙ", "Θεσσαλία", ("ΛΑΡΙΣΑΣ", "ΜΑΓΝΗΣΙΑΣ", "ΤΡΙΚΑΛΩΝ", "ΚΑΡΔΙΤΣΑΣ")),
+    ("ΗΠΕΙΡ", "Ήπειρος", ("ΙΩΑΝΝΙΝΩΝ", "ΑΡΤΑΣ", "ΠΡΕΒΕΖΑΣ", "ΘΕΣΠΡΩΤΙΑΣ")),
+    ("ΙΟΝΙ", "Ιόνια νησιά", ("ΚΕΡΚΥΡΑΣ", "ΖΑΚΥΝΘΟΥ", "ΚΕΦΑΛΛΗΝΙΑΣ", "ΛΕΥΚΑΔΑΣ")),
+    ("ΘΡΑΚ", "Θράκη", ("ΕΒΡΟΥ", "ΡΟΔΟΠΗΣ", "ΞΑΝΘΗΣ")),
+    ("ΒΟΡΕΙΟ ΑΙΓΑΙ", "Βόρειο Αιγαίο", ("ΛΕΣΒΟΥ", "ΧΙΟΥ", "ΣΑΜΟΥ")),
+]
+
 LEGAL = {"ΑΤΟΜΙΚ": "ΑΤΟΜΙΚΗ", "ΙΚΕ": "ΙΚΕ", "ΟΕ": "ΟΕ", "ΕΕ": "ΕΕ", "ΑΕ": "ΑΕ", "ΕΠΕ": "ΕΠΕ"}
 BLOCK_CREDIT = re.compile(r"ΠΙΣΤΟΛΗΠΤ|ΦΕΡΕΓΓΥ|ΔΑΝΕΙ|ΧΡΕΟΣ|ΧΡΕΗ|ΟΦΕΙΛ|ΠΤΩΧΕΥ|ΑΦΕΡΕΓΓΥ|ΠΙΣΤΩΣ|CREDIT|SOLVEN|LOAN|DEBT|DEFAULT")
 BLOCK_PERSONAL = re.compile(r"ΤΗΛΕΦΩΝ|EMAIL|E-MAIL|ΙΔΙΟΚΤΗΤ|ΙΔΙΟΚΤΗΣΙΑ|ΚΙΝΗΤΟ|ΑΜΚΑ|ΤΑΥΤΟΤΗΤ|ΜΙΣΘ|ΕΙΣΟΔΗΜΑ ΤΟΥ|PHONE|OWNER|SALARY")
@@ -39,13 +50,14 @@ BLOCK_INJECT = re.compile(r"SYSTEM PROMPT|IGNORE (ALL|PREVIOUS|THE|YOUR|ANY)|DIS
                           r"</?(SYSTEM|ASSISTANT|USER)>|\[/?INST\]|<SCRIPT|<IMG|ONERROR|JAVASCRIPT:|SELECT .* FROM|UNION SELECT|DROP TABLE|\.\./")
 # judgements about the honesty, reputation, legality or payment behaviour of a business or person: never answered
 # (the system only measures similarity; many businesses are sole proprietors, i.e. natural persons - brief section 9)
-BLOCK_TRUST = re.compile(r"\b(ΑΠΑΤ|ΕΞΑΠΑΤ|ΥΠΟΠΤ|ΚΑΚΟΠΛΗΡΩΤ|ΑΠΛΗΡΩΤ|ΦΟΡΟΔΙΑΦΥΓ|ΠΑΡΑΝΟΜ|ΝΟΜΙΜ|ΑΝΕΝΤΙΜ|ΑΡΝΗΤΙΚ|ΚΑΤΑΓΓΕΛ|ΠΡΟΣΤΙΜ|ΑΠΟΦΥΓ)|"
-                         r"\bΘΑ (ΜΕ |ΜΑΣ )?ΠΛΗΡΩΣ|ΠΛΗΡΩΝΕΙ ΣΤΗΝ ΩΡΑ|\bΦΗΜΗ|ΜΑΥΡΗ ΛΙΣΤΑ|"
+BLOCK_TRUST = re.compile(r"\b(ΑΠΑΤ|ΕΞΑΠΑΤ|ΚΑΚΟΠΛΗΡΩΤ|ΑΠΛΗΡΩΤ|ΦΟΡΟΔΙΑΦΥΓ|ΠΑΡΑΝΟΜ|ΝΟΜΙΜ|ΑΝΕΝΤΙΜ|ΚΑΤΑΓΓΕΛ|ΠΡΟΣΤΙΜ)|"
+                         r"\bΘΑ (ΜΕ |ΜΑΣ )?ΠΛΗΡΩΣ|ΠΛΗΡΩΝ\w* (ΣΤΗΝ ΩΡΑ|ΣΥΝΕΠΩΣ|ΚΑΝΟΝΙΚΑ)|\bΦΗΜΗ|ΜΑΥΡΗ ΛΙΣΤΑ|"
                          r"\bΧΕΙΡΟΤΕΡ\w* (ΕΠΙΧΕΙΡΗΣ|ΕΤΑΙΡ|ΜΑΓΑΖ|ΠΕΛΑΤ)|"
                          r"\b(SCAM|FRAUD|BLACKLIST|TRUSTWORTH|SHADY|ILLEGAL|TAX EVASION|SHOULD I AVOID)|RELIABLE (COMPANY|BUSINESS)")
 # "is X reliable / can I trust X / is X dangerous" - but questions about the RESULTS or the METHOD stay allowed
-TRUST_SOFT = re.compile(r"\bΑΞΙΟΠΙΣΤ|\bΕΜΠΙΣΤΕΥ(?!ΤΙΚ)|\bΕΠΙΚΙΝΔΥΝ(?!\w* (ΑΠΟΒΛΗΤ|ΑΝΑΚΥΚΛ))|\bΣΟΒΑΡ[ΗΟ]Σ? (ΕΠΙΧΕΙΡΗΣ|ΕΤΑΙΡ)|\bTRUST (THEM|THIS|THAT|IT)\b|\bRISKY\b|\bDANGEROUS\b")
-ABOUT_SYSTEM = re.compile(r"ΑΠΟΒΛΗΤ|ΑΠΟΤΕΛΕΣΜ|ΜΕΘΟΔ|ΜΟΝΤΕΛ|ΣΥΣΤΗΜ|ΑΝΑΛΥΣ|ΑΛΓΟΡΙΘΜ|ΠΡΟΤΑΣ|ΚΑΤΑΤΑΞ|ΛΙΣΤΑ|ΕΦΑΡΜΟΓ|ΠΡΟΦΙΛ|RESULT|METHOD|MODEL|SYSTEM")
+TRUST_SOFT = re.compile(r"\bΥΠΟΠΤ(?!\w* (ΘΟΡΥΒ|ΚΑΔ|ΔΡΑΣΤΗΡ))|\bΑΡΝΗΤΙΚ|\bΑΠΟΦΥΓ|\bΑΞΙΟΠΙΣΤ|\bΕΜΠΙΣΤΕΥ(?!ΤΙΚ)|\bΕΠΙΚΙΝΔΥΝ(?!\w* (ΑΠΟΒΛΗΤ|ΑΝΑΚΥΚΛ))|\bΣΟΒΑΡ[ΗΟ]Σ? (ΕΠΙΧΕΙΡΗΣ|ΕΤΑΙΡ)|\bTRUST (THEM|THIS|THAT|IT)\b|\bRISKY\b|\bDANGEROUS\b")
+ABOUT_SYSTEM = re.compile(r"ΑΠΟΒΛΗΤ|ΑΠΟΤΕΛΕΣΜ|ΜΕΘΟΔ|ΜΟΝΤΕΛ|ΣΥΣΤΗΜ|ΑΝΑΛΥΣ|ΑΛΓΟΡΙΘΜ|ΠΡΟΤΑΣ|ΚΑΤΑΤΑΞ|ΛΙΣΤΑ|ΕΦΑΡΜΟΓ|ΠΡΟΦΙΛ|"
+                          r"ΠΕΡΙΟΧ|ΝΟΜΟ|ΔΗΜΟ|ΚΑΔ|ΘΟΡΥΒ|RESULT|METHOD|MODEL|SYSTEM|AREA|REGION")
 
 
 def trust_judgement(N: str) -> bool:
@@ -160,6 +172,10 @@ class Assistant:
         return [w for w in re.findall(r"[Α-ΩA-Z]{3,}", N) if w not in STOP]
 
     def _place(self, N: str):
+        if not re.search(r"ΑΝΑΤΟΛΙΚ\w* ΑΤΤΙΚ|ΔΥΤΙΚ\w* ΑΤΤΙΚ", N):
+            for stem, display, prefs in REGIONS:
+                if re.search(r"\b" + stem, N):
+                    return (_letters(display), "region", display, prefs)
         for w in self._tokens(N):
             if len(w) < 4 or w in LEGAL:
                 continue
@@ -179,6 +195,12 @@ class Assistant:
         return None
 
     def _kad(self, N: str, skip: set):
+        m = re.search(r"(?:ΚΑΔ|NACE|KAD|ΚΩΔΙΚ\w*)\s*(\d{2}(?:[.\s]?\d{1,2}){0,3})", N)
+        if m:
+            digits = re.sub(r"\D", "", m.group(1))
+            codes = {k for k in self.kad_labels if str(k).startswith(digits)}
+            if codes:
+                return f"ΚΑΔ {m.group(1)}", codes
         for w in self._tokens(N):
             if len(w) < 5 or w in skip:
                 continue
@@ -198,7 +220,9 @@ class Assistant:
     def _mask(self, ids: pd.Index, place, legal, kad):
         t = self.t.loc[ids]
         m = np.ones(len(t), bool)
-        if place:
+        if place and place[1] == "region":
+            m &= t["prefecture"].astype(str).isin(place[3]).to_numpy()
+        elif place:
             col = "prefecture" if place[1] == "prefecture" else "municipality"
             m &= (t[col].astype(str) == place[2]).to_numpy()
         if legal:
@@ -211,7 +235,7 @@ class Assistant:
     def _filter_text(place, legal, kad):
         out = []
         if place:
-            out.append(("Νομός " if place[1] == "prefecture" else "Δήμος ") + place[2].split(" / ")[0])
+            out.append({"prefecture": "Νομός ", "region": "Περιφέρεια ", "municipality": "Δήμος "}[place[1]] + place[2].split(" / ")[0])
         if legal:
             out.append("νομική μορφή " + legal)
         if kad:
@@ -263,6 +287,8 @@ class Assistant:
         if pref and pref.startswith("missing:"):
             return self._out(f"Δεν υπάρχει προφίλ {pref[8:]}. Η ανάλυση βρήκε {len(self.pids)} προφίλ: "
                              + ", ".join(f"{p['profile_id']} ({p['title']})" for p in self.profiles) + ".", kind="info")
+        if re.search(r"ΝΟΜΙΚ\w* ΜΟΡΦ|LEGAL FORM", N) and not self._legal(N):
+            return self._legal_mix(pref)
         if re.search(r"ΜΕΡΙΔΙΟ|ΤΖΙΡ|TURNOVER|REVENUE", N):
             return self._profile(pref) if pref else self._overview()
         place, legal, kad = self._filters(N)
@@ -271,7 +297,8 @@ class Assistant:
             pref = self._profile_by_title(N)
             if pref and not wants_list:
                 return self._profile(pref)
-        n_req = re.search(r"(?<![\d.,])(\d{1,3})(?![\d.,])", q)        # "56.30" is a KAD code, not a row count
+        q_num = re.sub(r"(?i)(προφίλ|προφιλ|profile|icp)[-\s]*\d+|(?:ΚΑΔ|NACE|KAD)\s*[\d.\s]+", " ", q)
+        n_req = re.search(r"(?<![\d.,])(\d{1,3})(?![\d.,])", q_num)    # "56.30" is a KAD code, "προφίλ 2" a profile, not a row count
         n = max(1, min(int(n_req.group(1)), MAX_ROWS)) if n_req else 10
 
         if re.search(r"ΠΟΥ ΒΡΙΣΚΟΝΤΑΙ|ΣΕ ΠΟΙΕΣ ΠΕΡΙΟΧ|ΣΕ ΠΟΙΟΥΣ ΝΟΜΟΥΣ|ΣΕ ΠΟΙΟΥΣ ΔΗΜΟΥΣ|ΓΕΩΓΡΑΦ|ΠΟΙΕΣ ΠΕΡΙΟΧ|ΠΟΙΟΙ ΝΟΜΟΙ|WHERE", N):
@@ -382,6 +409,18 @@ class Assistant:
                 {"Μέτρηση": f"Στις 2.000 πρώτες παρόμοιες ({pid or 'συνολικά'})", "Τιμή": _int(in_top)}]
         return self._out(" ".join(facts), rows, ["Μέτρηση", "Τιμή"], sources=["vwHackCompany.csv", "lookalikes.csv"], facts=facts, filters=ftxt)
 
+    def _legal_mix(self, pid):
+        ids = [c for c in self.client_ids if c in self.t.index]
+        if pid:
+            ids = [c for c in ids if self.assign.get(c, ("", 0))[0] == pid]
+        t = self.t.loc[ids]
+        share_m = self.t["legal_type"].astype(str).value_counts(normalize=True)
+        vc = t["legal_type"].astype(str).value_counts().head(6)
+        rows = [{"Νομική μορφή": k, "Πελάτες": int(v), "Ποσοστό": _pct(v / max(len(t), 1)), "Στην αγορά": _pct(share_m.get(k, 0))} for k, v in vc.items()]
+        what = "των πελατών" + (f" του {pid}" if pid else "")
+        facts = [f"Νομική μορφή {what} ({_int(len(t))}):"] + [f"{r['Νομική μορφή']} {r['Ποσοστό']} (αγορά {r['Στην αγορά']})" for r in rows[:4]]
+        return self._out(facts[0] + " " + "; ".join(facts[1:]) + ".", rows, list(rows[0]) if rows else [], sources=["vwHackCompany.csv"], facts=facts)
+
     def _where(self, pid, clients):
         if clients:
             ids = [c for c in self.client_ids if c in self.t.index]
@@ -475,7 +514,7 @@ def summary_problems(text: str) -> list[str]:
     """Why an AI summary must be rejected (empty list = acceptable)."""
     N, bad = norm(text), []
     for name, rx in (("φερεγγυότητα/πίστωση", BLOCK_CREDIT), ("προσωπικά στοιχεία", BLOCK_PERSONAL), ("απόρρητα/τζίρος", BLOCK_SECRET),
-                     ("οδηγίες/εντολές", BLOCK_INJECT), ("κρίση αξιοπιστίας/φήμης", BLOCK_TRUST), ("σύνδεσμος/domain/email", _DOMAIN), ("εντολή προς τον χρήστη", _TO_USER)):
+                     ("οδηγίες/εντολές", BLOCK_INJECT), ("κρίση αξιοπιστίας/φήμης", BLOCK_TRUST), ("κρίση αξιοπιστίας/φήμης", TRUST_SOFT), ("σύνδεσμος/domain/email", _DOMAIN), ("εντολή προς τον χρήστη", _TO_USER)):
         if rx.search(N):
             bad.append(name)
     try:

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS profiles(run_id TEXT, profile_id TEXT, title TEXT, n_
 CREATE TABLE IF NOT EXISTS assignments(run_id TEXT, company_id TEXT, profile_id TEXT, score REAL);
 CREATE TABLE IF NOT EXISTS lookalikes(run_id TEXT, profile_id TEXT, company_id TEXT, rank INTEGER, score REAL, reason TEXT);
 CREATE TABLE IF NOT EXISTS benchmarks(run_id TEXT PRIMARY KEY, created_at TEXT, result_json TEXT);
+CREATE TABLE IF NOT EXISTS feedback(run_id TEXT, seq INTEGER, ts TEXT, action TEXT, company_id TEXT, reason TEXT, source TEXT, PRIMARY KEY(run_id, seq));
 CREATE INDEX IF NOT EXISTS ix_look ON lookalikes(run_id, profile_id, rank);
 CREATE INDEX IF NOT EXISTS ix_assign ON assignments(run_id, company_id);
 """
@@ -74,6 +75,16 @@ class Store:
             with con:
                 con.execute("INSERT OR REPLACE INTO benchmarks VALUES(?,?,?)",
                             (run_id, time.strftime("%Y-%m-%d %H:%M:%S"), json.dumps(result, ensure_ascii=False)))
+        finally:
+            con.close()
+
+    def save_feedback(self, run_id: str, rows: list[dict]):
+        """Audit trail of every human label (AI Act human oversight). Rows are append-only."""
+        con = self._c()
+        try:
+            with con:
+                con.executemany("INSERT OR REPLACE INTO feedback VALUES(?,?,?,?,?,?,?)",
+                                [(run_id, r["seq"], r["ts"], r["action"], r["company_id"], r["reason"], r["source"]) for r in rows])
         finally:
             con.close()
 

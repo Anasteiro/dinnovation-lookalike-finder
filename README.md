@@ -102,10 +102,12 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements-light.txt
 
 python run.py synth --out data      # synthetic demo data (never real)
-python run.py serve --data data     # opens http://localhost:8000
+python run.py serve --data data --embed tfidf   # opens http://localhost:8000
 ```
 
 In the browser click **«Χρήση δείγματος διαγωνισμού»** (use the sample), or upload your own client file (`.xlsx` / `.csv` with a VAT column and an optional turnover column). The interface is in Greek.
+
+> **Embedding note (v30.5).** The code default is `multilingual-e5-base` (downloaded once, falls back to TF-IDF with a visible notice if it cannot load). On the competition data TF-IDF + SVD measured equal or better (see the caveat above), so the quick start and the reproducible numbers use `--embed tfidf` (or `FORCECRM_EMBED=tfidf`).
 
 **Windows one-click:** `setup_windows.bat` once, then `start_demo.bat`. **Linux:** `bash setup_linux.sh` then `bash start_demo.sh`.
 

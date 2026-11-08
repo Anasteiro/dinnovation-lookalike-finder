@@ -8,6 +8,8 @@ CACHE_DIR = DATA_DIR / "cache"
 OUT_DIR = ROOT / "outputs"
 
 SEED = 42
+# Neural embeddings of the KAD descriptions (brief A1). Downloaded once by the setup script, then cached; override with FORCECRM_EMBED.
+DEFAULT_EMBED = "st:intfloat/multilingual-e5-base"
 KS = (500, 2000)                       # Recall@k from the brief
 REF_DATE = pd.Timestamp("2026-11-06")  # reference date for company age
 

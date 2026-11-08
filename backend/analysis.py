@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from . import config as C, icp, stats, lookalike as L, rankers as R, ingest as I
-from .labels import SHORT_LEGAL, short_kad
+from .labels import GROUP_NAMES, SHORT_LEGAL, short_kad
 from . import clarity as K, external as X
 
 CONF_NONE = 0.05          # below this share of own members -> "fits no profile"
@@ -37,7 +37,58 @@ def short_place(label: str) -> str:
     return label.split(" / ")[0]
 
 
-def make_title(enr: pd.DataFrame) -> str:
+def business_types(primary_kads, kad_desc: dict, top: int = 5) -> list[dict]:
+    """What the clients of a profile ARE: share of each 4-digit main activity, most common first. Plain counts, no statistics."""
+    s = pd.Series(primary_kads).astype(str)
+    s = s[s != "NA"].str[:4]
+    out = []
+    for code, n in s.value_counts().head(top).items():
+        d = kad_desc.get(code + "0000") or next((v for k, v in sorted(kad_desc.items()) if str(k).startswith(code)), code)
+        out.append({"code": code, "label": GROUP_NAMES.get(code) or short_kad(d), "share": round(float(n / max(len(s), 1)), 3)})
+    return out
+
+
+FEATURE_GROUP = (("kad4:", "kad:"), ("pref:", "muni:"), ("legal:",))
+
+
+def business_first(enr: pd.DataFrame) -> pd.DataFrame:
+    """Presentation order: type of business, then where, then legal form, then the rest. Statistics are untouched; inside a group the
+    most significant comes first. The first rows are balanced so that the description covers all three."""
+    f = enr["feature"].astype(str)
+    picks = []
+    for prefixes, n in zip(FEATURE_GROUP, (3, 2, 1)):
+        picks.extend(enr.index[f.str.startswith(prefixes)][:n].tolist())
+    rest = [i for g in FEATURE_GROUP for i in enr.index[f.str.startswith(g)].tolist() if i not in picks]
+    other = [i for i in enr.index if i not in picks and i not in rest]
+    return enr.loc[picks + rest + other].reset_index(drop=True)
+
+
+def make_title(enr: pd.DataFrame, types: list[dict] | None = None) -> str:
+    """Business type · where · legal form, always in this order. The type is what most clients of the profile actually are."""
+    if types:
+        kept = [t for t in types if t["share"] >= 0.25][:2] or types[:1]
+        names = list(dict.fromkeys(t["label"] for t in kept))
+        kind = " και ".join(names)
+    else:
+        r = enr[enr["feature"].str.startswith(("kad:", "kad4:"))]
+        kind = short_kad(r.iloc[0]["label"].split(": ", 1)[-1]) if len(r) else None
+    def typical(prefix, min_share):
+        r = enr[enr["feature"].str.startswith(prefix)]
+        return r[r["share_in_profile"] >= min_share]
+    muni, pref = typical("muni:", 0.3), enr[enr["feature"].str.startswith("pref:")].head(2)
+    if len(muni):
+        place = short_place(muni.iloc[0]["label"])
+    elif len(pref):
+        p = [x.replace("Νομός ", "") for x in pref["label"]]
+        place = ("Νομός " if len(p) == 1 else "Νομοί ") + ", ".join(p)
+    else:
+        place = None
+    leg = enr[enr["feature"].str.startswith("legal:")]
+    keep = leg[leg["share_in_profile"] >= 0.3].head(2)
+    keep = keep if len(keep) else leg.head(1)
+    legal = ", ".join(SHORT_LEGAL.get(x.replace("Νομική μορφή ", "").strip(), x.replace("Νομική μορφή ", "").strip()) for x in keep["label"]) or None
+    bits = [b for b in (kind, place, legal) if b]
+    return " · ".join(bits) if bits else "Γενικό προφίλ πελατών"
     def first(prefix):
         r = enr[enr["feature"].str.startswith(prefix)]
         if prefix in ("muni:", "pref:") and len(r):
@@ -58,9 +109,11 @@ def _times(x: float) -> str:
     return (f"{x:.1f}".replace(".", ",") if x < 10 else f"{x:.0f}") + " φορές"
 
 
-def template_description(n, share, enr) -> str:
+def template_description(n, share, enr, types=None) -> str:
     """Automatic (non-AI) text built only from the statistics; q-values stay in the table below it."""
     txt = f"Ομάδα {n} πελατών" + (f" ({share:.0%} του τζίρου)." if share is not None else ".")
+    if types:
+        txt += " Τύπος επιχειρήσεων: " + ", ".join(f"{t['label']} ({t['share']:.0%})" for t in types[:3] if t["share"] >= 0.05) + "."
     if len(enr):
         top = "; ".join(f"{r.label} ({_times(r.shrunk_lift)} συχνότερα από την αγορά)" for r in enr.head(4).itertuples())
         txt += " Ξεχωρίζουν στατιστικά: " + top + "."
@@ -70,13 +123,14 @@ def template_description(n, share, enr) -> str:
 
 
 def run_analysis(ctx, out_dir: Path | None = None, k=None, B=30, revenue_mode="log", top_per_profile=2000,
-                 top_global=5000, blend=C.CENTROID_BLEND, m_knn=C.KNN_M, progress=lambda step, **kw: None) -> dict:
+                 top_global=5000, blend=C.CENTROID_BLEND, m_knn=C.KNN_M, progress=lambda step, **kw: None, rank_only: bool = False) -> dict:
+    """rank_only=True: same clustering and same ranking, without statistics, reasons and files (used by the hold-out tests)."""
     t0 = time.time()
     comp = ctx.companies
     n = len(comp)
     s = ctx.client_shops
     cpos = s["pos"].to_numpy()
-    w = R.revenue_weights(s["revenue"].to_numpy(), revenue_mode)
+    w = R.revenue_weights(s["weight"].to_numpy(float), revenue_mode)   # per-shop weight: a VAT's turnover is split across its shops (identical when each VAT has one shop)
     timings = {}
 
     progress("clustering")
@@ -88,7 +142,7 @@ def run_analysis(ctx, out_dir: Path | None = None, k=None, B=30, revenue_mode="l
 
     progress("statistics")
     t = time.time()
-    F, names, flabels = stats.build_feature_matrix(comp, ctx.activity, ctx.kad_desc)
+    F, names, flabels = (None, None, None) if rank_only else stats.build_feature_matrix(comp, ctx.activity, ctx.kad_desc)
     is_client = comp["vat"].isin(set(s["vat"])).to_numpy()
     bg_pos = np.flatnonzero(~is_client)
     timings["features_s"] = round(time.time() - t, 2)
@@ -107,9 +161,18 @@ def run_analysis(ctx, out_dir: Path | None = None, k=None, B=30, revenue_mode="l
         sc, nr = L.profile_scores(ctx.model, mpos, mw, m_knn, blend)
         score[:, c], near[:, c] = sc, mpos[nr]
         rank_score[:, c] = C.RANK_W_KNN * R._pct(sc) + C.RANK_W_PU * R._pct(R.pu_scores(Zpu, mpos, mw / mw.mean()))
-        loo_sorted[c] = np.sort(L.member_loo_scores(sub.subset(mem), mw, m_knn, blend))
-        enrs[c] = stats.enrichment(F, names, flabels, mpos, bg_pos)
+        if not rank_only:
+            loo_sorted[c] = np.sort(L.member_loo_scores(sub.subset(mem), mw, m_knn, blend))
+            enrs[c] = business_first(stats.enrichment(F, names, flabels, mpos, bg_pos))
     timings["scoring_s"] = round(time.time() - t, 2)
+
+    if rank_only:
+        cand_ = np.flatnonzero(~is_client)
+        sw = np.array([w[members[c]].sum() for c in range(kk)], float)
+        g_ = R.merge_proportional(rank_score[cand_], sw / sw.sum())
+        return {"meta": {"k": kk}, "_state": {"members": [(cpos[members[c]], w[members[c]]) for c in range(kk)], "share": sw / sw.sum(), "cand": cand_,
+                                              "_default_order": cand_[np.argsort(-g_, kind="stable")], "_default_score": np.sort(g_)[::-1],
+                                              "rank_score": rank_score, "profile_ids": [f"icp-{c + 1}" for c in range(kk)]}}
 
     # ---- assignments (A3): same score for everybody, confidence = share of own members scoring lower
     best = score.argmax(axis=1)
@@ -155,7 +218,7 @@ def run_analysis(ctx, out_dir: Path | None = None, k=None, B=30, revenue_mode="l
     shr = np.maximum(share_w / share_w.sum(), 1e-9)
     prank = np.stack([np.argsort(np.argsort(-rank_score[cand, c], kind="stable"), kind="stable") for c in range(kk)], axis=1)
     best_rank = prank.min(axis=1) + 1                       # best 1-based position of each business in ANY profile's own ranking
-    gbest = np.argmin(prank + 1e-9 * prank / shr[None, :], axis=1)   # the profile where it ranks best (ties: the heavier profile)
+    gbest = np.argmin(prank / shr[None, :], axis=1)         # the profile that actually selected it in the merge (same key as merge_proportional)
     go = np.argsort(-gscore, kind="stable")[:top_global]
 
     # ---- reasons: for every per-profile top row AND every global row (with the profile that selected it)
@@ -199,9 +262,10 @@ def run_analysis(ctx, out_dir: Path | None = None, k=None, B=30, revenue_mode="l
         share = float(np.nansum(real_w[mem]) / tot_w) if tot_w > 0 and s["revenue"].notna().any() else None
         stab = float(res.stability.get(c, 1.0))
         enr = enrs[c]
+        types = business_types(ctx.primary_kad[cpos[mem]], ctx.kad_desc)
         profiles.append({
-            "profile_id": pid[c], "title": make_title(enr),
-            "description": template_description(int(len(mem)), share, enr), "description_is_ai": False,
+            "profile_id": pid[c], "title": make_title(enr, types), "business_types": types,
+            "description": template_description(int(len(mem)), share, enr, types), "description_is_ai": False,
             "description_meta": {"source": "template", "verified": False, "model": None, "paragraphs": [],
                                  "ai_label": "Αυτόματο κείμενο από στατιστικά (χωρίς AI)"},
             "n_clients": int(len(mem)), "n_client_vats": int(s["vat"].iloc[mem].nunique()),
@@ -215,7 +279,7 @@ def run_analysis(ctx, out_dir: Path | None = None, k=None, B=30, revenue_mode="l
                           "p_value": float(r.p_value), "q_value": float(r.q_value)} for r in enr.head(15).itertuples()],
         })
     meta = {"k": kk, "selection_rule": res.rule, "k_table": res.k_table, "match": ctx.match_stats,
-            "universe": int(n), "candidates": int(len(cand)), "assigned_to_profile": int((status == "assigned").sum()),
+            "embedding": ctx.embed_backend, "universe": int(n), "candidates": int(len(cand)), "assigned_to_profile": int((status == "assigned").sum()),
             "none_share": float((status == "none").mean()), "cluster_vs_score_agreement_on_clients": agree,
             "params": {"revenue_mode": revenue_mode, "bootstrap": B, "blend": blend, "m_knn": m_knn,
                        "conf_none": CONF_NONE, "feature_note": stats.MONTHS_NOTE},

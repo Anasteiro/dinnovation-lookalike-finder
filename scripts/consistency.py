@@ -17,7 +17,7 @@ def fingerprint(d: Path):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=str(C.DATA_DIR))
-    ap.add_argument("--embed", default="tfidf")
+    ap.add_argument("--embed", default=C.DEFAULT_EMBED)
     ap.add_argument("--runs", type=int, default=3)
     a = ap.parse_args(argv)
     data = Path(a.data); tmp = Path(tempfile.mkdtemp())

@@ -17,7 +17,7 @@ ABLATIONS = {
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=str(C.DATA_DIR))
-    ap.add_argument("--embed", default="tfidf")
+    ap.add_argument("--embed", default=C.DEFAULT_EMBED)
     ap.add_argument("--repeats", type=int, default=30)
     ap.add_argument("--match", default="split", choices=["split", "head", "full"])
     ap.add_argument("--revenue", default="log", choices=["log", "sqrt", "none"])

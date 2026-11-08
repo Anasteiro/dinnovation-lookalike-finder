@@ -1,5 +1,5 @@
 """Start the whole app on localhost (the one command):   python run.py serve
-Options: --data data --embed tfidf --llm-model <ollama name> --port 8000 --no-browser"""
+Options: --data data --embed <model> --llm-model <ollama name> --port 8000 --no-browser"""
 import argparse, threading, webbrowser
 import uvicorn
 from backend import config as C
@@ -8,7 +8,7 @@ from backend.api import create_app
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=str(C.DATA_DIR))
-    ap.add_argument("--embed", default="tfidf")
+    ap.add_argument("--embed", default=C.DEFAULT_EMBED)
     ap.add_argument("--llm-model", default=None)
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--no-browser", action="store_true")

@@ -8,7 +8,9 @@ sudo apt install -y python3-venv python3-pip unzip curl
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements-light.txt
+pip install -r requirements.txt
+python run.py getmodel || echo "WARNING: the embedding model could not be prepared. The app will work with TF-IDF and will say so."
+python run.py embedbench --data data || echo "WARNING: the embedding comparison did not finish. Run: bash compare_embeddings.sh"
 if ! command -v ollama >/dev/null; then
   echo "Installing Ollama (needs internet, asks for your password)..."
   curl -fsSL https://ollama.com/install.sh | sh

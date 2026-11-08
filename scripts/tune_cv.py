@@ -47,7 +47,7 @@ def variants(stage):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default=str(C.DATA_DIR)); ap.add_argument("--embed", default="tfidf")
+    ap.add_argument("--data", default=str(C.DATA_DIR)); ap.add_argument("--embed", default=C.DEFAULT_EMBED)
     ap.add_argument("--stage", type=int, default=1); ap.add_argument("--repeats", type=int, default=12)
     ap.add_argument("--match", default="split"); ap.add_argument("--revenue", default="log")
     a = ap.parse_args(argv)

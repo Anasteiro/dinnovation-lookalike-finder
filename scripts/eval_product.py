@@ -13,7 +13,7 @@ from backend import analysis as A, evalharness as H, pipeline as P, ingest as I,
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="run.py evalproduct")
     ap.add_argument("--data", default=str(C.DATA_DIR)); ap.add_argument("--repeats", type=int, default=10)
-    ap.add_argument("--embed", default="tfidf"); ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--embed", default=C.DEFAULT_EMBED); ap.add_argument("--seed", type=int, default=7)
     a = ap.parse_args(argv)
     t = time.time(); base = P.build_base(a.data, a.embed); print(f"market built in {time.time() - t:.1f}s")
     clients = I.load_clients(I.find_file(a.data, "*Pelatologio*.xlsx"))

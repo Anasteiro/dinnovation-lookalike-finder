@@ -8,7 +8,20 @@ bootstrap stability + cohesion gain; "one ICP" is returned when the client list 
 from __future__ import annotations
 from dataclasses import dataclass, field
 import numpy as np
-from sklearn.metrics import adjusted_rand_score
+
+
+def adjusted_rand_score(a, b) -> float:
+    """Same integer formula as sklearn.metrics.adjusted_rand_score (same result, tested), without its input validation: about 40x faster."""
+    _, a = np.unique(a, return_inverse=True); _, b = np.unique(b, return_inverse=True)
+    na, nb = int(a.max()) + 1, int(b.max()) + 1
+    c = np.bincount(a * nb + b, minlength=na * nb).reshape(na, nb).astype(np.int64)
+    n = int(c.sum()); nr, nk = c.sum(axis=1), c.sum(axis=0)
+    sq = int((c * c).sum())
+    fp = int((c @ nk).sum()) - sq; fn = int((c.T @ nr).sum()) - sq
+    tp = sq - n; tn = n * n - fp - fn - sq
+    if fn == 0 and fp == 0:
+        return 1.0
+    return 2.0 * (tp * tn - fn * fp) / ((tp + fn) * (fn + tn) + (tp + fp) * (fp + tn))
 
 
 def kernel_kmeans(K, w, k, rng, n_init=6, max_iter=60, active=None):
@@ -93,12 +106,14 @@ class ICPResult:
     rule: str = ""
 
 
+REF_N_INIT = 12          # restarts for the reference clustering of each k (the bootstrap replicates keep 3)
+
+
 def discover(sub_model, w, groups, k_max=6, B=30, seed=42, min_gain=0.02, min_ari=0.6,
              min_size_frac=0.05, force_k=None) -> ICPResult:
     """Pick the number of profiles. k is eligible when bootstrap ARI >= min_ari, every profile has
     >= max(8, 5% of clients) shops and cohesion gain over k=1 >= min_gain. The eligible k with the highest
     bootstrap ARI wins (smallest k within 0.03 of the best); none eligible -> ONE ICP."""
-    rng = np.random.default_rng(seed)
     m = sub_model.n
     K = sub_model.sim_to(np.arange(m)).astype(np.float64)
     w = np.asarray(w, float)
@@ -110,7 +125,10 @@ def discover(sub_model, w, groups, k_max=6, B=30, seed=42, min_gain=0.02, min_ar
     for k in ks:
         if k == 1:
             continue
-        labels = kernel_kmeans(K, w, k, rng)
+        # Every k gets its own random stream and a thorough reference clustering. Before, one stream was shared, so the partition
+        # tried for k=3 depended on how many bootstraps k=2 had used: 30 bootstraps found a poor k=3 and wrongly answered "2 profiles".
+        rng = np.random.default_rng([seed, k])
+        labels = kernel_kmeans(K, w, k, rng, n_init=REF_N_INIT)
         sizes = np.bincount(labels, minlength=k)
         gain = cohesion(K, w, labels) - base
         ari, jac = bootstrap_stability(K, w, groups, k, labels, B, rng) if B else (1.0, {c: 1.0 for c in range(k)})

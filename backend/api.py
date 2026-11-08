@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 
 from . import chat as CH
+from . import embedbench as EB, feedback as FB, hardsplit as HS
 from . import rankers as R
 from . import analysis as A, benchmark as BM, clarity as K, external as X, enrich as EN, whatif as WI, config as C, ingest as I, llm as LLM, pipeline as P, store as ST
 
@@ -28,11 +29,12 @@ MAX_UPLOAD = 5 * 1024 * 1024
 EXPORTS = {"profiles.json": "application/json", "assignments.csv": "text/csv", "lookalikes.csv": "text/csv",
            "lookalikes_global.csv": "text/csv", "assignments_detail.csv": "text/csv", "analysis_meta.json": "application/json",
            "activity_clarity.csv": "text/csv", "refined_lookalikes.csv": "text/csv",
-           "lookalikes_by_profile.csv": "text/csv"}
+           "lookalikes_by_profile.csv": "text/csv", "lookalikes_feedback.csv": "text/csv", "feedback_log.csv": "text/csv"}
 
 LICENSES = [
     {"item": "Στοιχεία επιχειρήσεων", "source": "ΓΕΜΗ Open Data (opendata.businessportal.gr)", "license": "ODC-BY 1.0"},
     {"item": "Στίγματα GPS", "source": "© OpenStreetMap contributors (γεωκωδικοποίηση)", "license": "ODbL"},
+    {"item": "multilingual-e5-base (embeddings)", "source": "Microsoft, intfloat/multilingual-e5-base", "license": "MIT"},
     {"item": "EuroLLM-9B-Instruct", "source": "Unbabel, IST, EU-funded", "license": "Apache-2.0"},
     {"item": "Πληθυσμός δήμων (Απογραφή 2021, προσωρινά)", "source": "ΕΛΣΤΑΤ - αντίγραφο github.com/tdiam/greece-population-census-2021", "license": "CC0 1.0"},
     {"item": "Όρια Ελλάδας για τον χάρτη", "source": "Natural Earth 1:10m (μέσω world-atlas)", "license": "Δημόσιο κτήμα"},
@@ -57,6 +59,8 @@ class Job:
         self.result, self.ctx, self.company_table = None, None, None
         self.narration = {"status": "idle"}
         self.benchmark = {"status": "idle"}
+        self.hardsplit = {"status": "idle"}
+        self.feedback = None
 
     def log(self, step, **kw):
         self.events.append({"t": round(time.time() - self.created, 2), "step": step, **kw})
@@ -90,7 +94,7 @@ def create_app(data_dir: Path | None = None, embed: str | None = None, llm_model
                auto_narrate: bool = True) -> FastAPI:
     import os
     data_dir = Path(data_dir or os.environ.get("FORCECRM_DATA") or C.DATA_DIR)
-    embed = embed or os.environ.get("FORCECRM_EMBED", "tfidf")
+    embed = embed or os.environ.get("FORCECRM_EMBED") or C.DEFAULT_EMBED
     llm_model = llm_model or os.environ.get("FORCECRM_LLM")
     out_root = Path(out_root or C.OUT_DIR / "jobs")
     custom_llm = llm_factory is not None                       # tests / alternative back-ends
@@ -128,7 +132,7 @@ def create_app(data_dir: Path | None = None, embed: str | None = None, llm_model
         with build_lock:
             if state["base"] is None:
                 t = time.time()
-                state["base"] = P.build_base(data_dir, embed)
+                state["base"] = P.build_base(data_dir, embed, fallback=True)
                 b = state["base"]                     # client-independent features: computed once, reused by every analysis
                 R.pu_features(b.model, b.companies["latitude"], b.companies["longitude"])
                 state["build_s"] = round(time.time() - t, 1)
@@ -226,7 +230,8 @@ def create_app(data_dir: Path | None = None, embed: str | None = None, llm_model
         ollama = ollama_up()
         has_data = any(data_dir.rglob("vwHackCompany.csv")) if data_dir.exists() else False
         return {"status": "ok", "data_found": has_data, "market_data_loaded": state["base"] is not None,
-                "embedding": embed, "ollama_running": ollama, "llm_model": llm_model, "jobs": len(jobs)}
+                "embedding": state["base"].embed_backend if state["base"] is not None else embed,
+                "embedding_warning": state["base"].embed_warning if state["base"] is not None else None, "ollama_running": ollama, "llm_model": llm_model, "jobs": len(jobs)}
 
     @app.post("/api/analyze")
     async def analyze(file: UploadFile | None = File(None), use_sample: bool = Form(False),
@@ -262,6 +267,207 @@ def create_app(data_dir: Path | None = None, embed: str | None = None, llm_model
         job.log("uploaded", client_vats=int(len(clients)), file=name)
         threading.Thread(target=run_job, args=(job, clients, k, max(0, min(boot, 100)), match), daemon=True).start()
         return {"job_id": job.id}
+
+    # ------------------------------------------------------------------ feedback re-ranking
+    def session(j: Job) -> FB.FeedbackSession:
+        if j.feedback is None:
+            j.feedback = FB.FeedbackSession(j.ctx, j.result["_state"])
+        return j.feedback
+
+    def persist_feedback(j: Job, s: FB.FeedbackSession, start: int):
+        """Files are rewritten and new audit rows stored after every change; a failure here must never lose the label."""
+        try:
+            d = out_root / j.id
+            s.export_frame().to_csv(d / "lookalikes_feedback.csv", index=False, encoding="utf-8")
+            s.log_frame().to_csv(d / "feedback_log.csv", index=False, encoding="utf-8")
+            store.save_feedback(j.id, s.history[start:])
+        except Exception as e:
+            j.log("feedback_store_warning", message=str(e))
+
+    def feedback_state(s: FB.FeedbackSession) -> dict:
+        rk = s.ranking()
+        hist = [h for h in s.history if h["action"] == "label" and not h.get("undone")]
+        return {"counts": s.counts(), "labelled": len(s.labels), "strength": s.strength, "alpha": round(rk.alpha, 3),
+                "can_undo": bool(hist), "reasons": [{"id": k, "label": v["label"], "group": v["group"]} for k, v in FB.REASONS.items()]}
+
+    def feedback_items(j: Job, s: FB.FeedbackSession, rows: np.ndarray, ranks: np.ndarray) -> list[dict]:
+        """Rows of the current list with the move relative to the model's list (both without the businesses already marked)."""
+        rk = s.ranking()
+        kept = s.base_order[~np.isin(s.base_order, np.array(sorted(s.labels), dtype=np.int64))] if s.labels else s.base_order
+        model_pos = np.full(len(j.ctx.companies), -1, np.int64); model_pos[kept] = np.arange(1, len(kept) + 1)
+        pid = s.state["profile_ids"]
+        t = j.company_table
+        out = []
+        for i, r in zip(rows, ranks):
+            i = int(i); cid = s.ids[i]; row = t.iloc[i]
+            mv = int(model_pos[i]) - int(r)
+            out.append({"rank": int(r), "model_rank": int(model_pos[i]), "moved": mv, "company_id": cid, "name": str(row["name"] or ""),
+                        "municipality": str(row["municipality"] or "").split(" / ")[0], "prefecture": str(row["prefecture"] or ""), "legal_type": str(row["legal_type"] or ""),
+                        "tier": FB.tier(r), "primary_kad_label": str(row["primary_kad_label"] or ""), "founded": None if pd.isna(row["founded"]) else int(row["founded"]),
+                        "profile_id": pid[int(rk.gprofile[i])], "explanation": s.explain(i, mv) if abs(mv) >= 1 else None})
+        return out
+
+    @app.get("/api/jobs/latest")
+    def latest_job():
+        done = [j for j in jobs.values() if j.status == "done"]
+        if not done:
+            raise HTTPException(404, "no finished analysis")
+        return {"job_id": max(done, key=lambda j: j.created).id}
+
+    @app.get("/api/jobs/{jid}/feedback")
+    def feedback_get(jid: str, limit: int = 25, offset: int = 0, q: str = ""):
+        j = done_job(jid)
+        s = session(j)
+        with s._lock:
+            rk = s.ranking()
+            order = rk.order
+            ranks = np.arange(1, len(order) + 1)
+            if q.strip():
+                ql = CH.norm(q.strip()[:80])
+                t = j.company_table
+                m = np.zeros(len(order), bool)
+                for col in ("name", "municipality", "primary_kad_label"):       # plain text, never a regex (same rule as /api/lookalikes)
+                    m |= pd.Series(t[col].fillna("").astype(str).to_numpy()[order]).map(CH.norm).str.contains(ql, regex=False).to_numpy()
+                order, ranks = order[m], ranks[m]
+            lim = max(1, min(int(limit), 200)); off = max(0, int(offset))
+            return _json({**feedback_state(s), "total": int(len(order)), "offset": off, "limit": lim,
+                          "items": feedback_items(j, s, order[off:off + lim], ranks[off:off + lim])})
+
+    @app.post("/api/jobs/{jid}/feedback")
+    def feedback_post(jid: str, body: dict):
+        """body: {company_id, reason} or {labels: [{company_id, reason}, ...]} (at most 5000), optional strength 0..1."""
+        j = done_job(jid)
+        s = session(j)
+        if not isinstance(body, dict):
+            raise HTTPException(400, "body must be an object")
+        labels = body.get("labels")
+        if labels is None and "company_id" in body:
+            labels = [{"company_id": body.get("company_id"), "reason": body.get("reason")}]
+        labels = labels or []
+        if not isinstance(labels, list) or len(labels) > 5000:
+            raise HTTPException(400, "labels must be a list of at most 5000 items")
+        with s._lock:
+            start = len(s.history)
+            before = s.ranking().order.copy()
+            for x in labels:                                       # validate all first: a bad row must not leave half a batch applied
+                if not isinstance(x, dict) or x.get("reason") not in FB.REASONS:
+                    raise HTTPException(400, "unknown reason")
+                try:
+                    s.resolve(x.get("company_id"))
+                except KeyError:
+                    raise HTTPException(404, "unknown company")
+                except ValueError as e:
+                    raise HTTPException(400, str(e))
+            if body.get("strength") is not None:
+                try:
+                    s.set_strength(float(body["strength"]))
+                except (TypeError, ValueError):
+                    raise HTTPException(400, "strength must be a number")
+            for x in labels:
+                s.add(x["company_id"], x["reason"])
+            s.ranking()
+            persist_feedback(j, s, start)
+            return _json({**feedback_state(s), "impact": s.impact(before)})
+
+    @app.post("/api/jobs/{jid}/feedback/undo")
+    def feedback_undo(jid: str):
+        j = done_job(jid)
+        s = session(j)
+        with s._lock:
+            start = len(s.history)
+            if s.undo() is None:
+                raise HTTPException(409, "nothing to undo")
+            s.ranking()
+            persist_feedback(j, s, start)
+            return _json(feedback_state(s))
+
+    @app.post("/api/jobs/{jid}/feedback/reset")
+    def feedback_reset(jid: str):
+        j = done_job(jid)
+        s = session(j)
+        with s._lock:
+            start = len(s.history)
+            s.reset()
+            persist_feedback(j, s, start)
+            return _json(feedback_state(s))
+
+    @app.get("/api/jobs/{jid}/feedback/queue")
+    def feedback_queue(jid: str, n: int = 12, explore: float = 0.0):
+        j = done_job(jid)
+        s = session(j)
+        with s._lock:
+            q = s.queue(n, explore=float(min(1.0, max(0.0, explore))))
+            rk = s.ranking()
+            where = np.empty(len(j.ctx.companies), np.int64); where[rk.order] = np.arange(1, len(rk.order) + 1)
+            rows = np.array([x["pos"] for x in q], dtype=np.int64)
+            items = feedback_items(j, s, rows, where[rows])
+            for it, x in zip(items, q):
+                it["why"] = x["why"]
+            return _json({**feedback_state(s), "items": items})
+
+    @app.post("/api/jobs/{jid}/feedback/validate")
+    def feedback_validate(jid: str):
+        j = done_job(jid)
+        s = session(j)
+        return _json(s.validate())
+
+    # ------------------------------------------------------------------ embedding comparison (brief 5.3)
+    bench = {"state": {"status": "idle"}}
+
+    def bench_view() -> dict:
+        s = bench["state"]
+        if s["status"] == "idle":
+            s = EB.load_result(out_root.parent) or s
+        return {**s, "preflight": EB.preflight(), "active": state["base"].embed_backend if state["base"] is not None else embed,
+                "active_warning": state["base"].embed_warning if state["base"] is not None else None}
+
+    @app.get("/api/embedbench")
+    def embedbench_get():
+        return _json(bench_view())
+
+    @app.post("/api/embedbench")
+    def embedbench_start(job: str | None = Form(None), repeats: int = Form(10)):
+        """Compares the embedding models on the same splits, in the background. Uses the job's clients, otherwise the challenge list."""
+        if bench["state"]["status"] == "running":
+            return bench_view()
+        pf = EB.preflight()
+        if not pf["ready"]:
+            raise HTTPException(409, pf["fix"])
+        clients = job_or_404(job).ctx.clients if job else I.load_clients(I.find_file(data_dir, "*Pelatologio*.xlsx"))
+        reps = max(2, min(int(repeats), 30))
+        bench["state"] = {"status": "running", "message": "Ξεκινά…", "done": 0, "total": 1, "pct": 0, "log": []}
+
+        def work():
+            try:
+                bench["state"] = EB.run(data_dir, clients, out_root.parent, EB.DEFAULT_BACKENDS, reps, progress=lambda ev: bench.__setitem__("state", ev))
+            except Exception as e:
+                bench["state"] = {"status": "error", "message": f"{type(e).__name__}: {e}"}
+        threading.Thread(target=work, daemon=True).start()
+        return bench_view()
+
+    # ------------------------------------------------------------------ hard split
+    @app.post("/api/jobs/{jid}/hardsplit")
+    def hardsplit_start(jid: str, quick: bool = Form(True)):
+        """Strict evaluation on the uploaded clients (background job; poll GET)."""
+        j = done_job(jid)
+        if j.hardsplit["status"] == "running":
+            return j.hardsplit
+        j.hardsplit = {"status": "running", "step": "start"}
+
+        def work():
+            try:
+                with run_lock:
+                    res = HS.run_suite(get_base(), j.ctx.clients, quick=quick, progress=lambda ev: setattr(j, "hardsplit", ev))
+                j.hardsplit = res
+                (out_root / j.id / "hardsplit_report.json").write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception as e:
+                j.hardsplit = {"status": "error", "message": str(e)}
+        threading.Thread(target=work, daemon=True).start()
+        return j.hardsplit
+
+    @app.get("/api/jobs/{jid}/hardsplit")
+    def hardsplit_get(jid: str):
+        return job_or_404(jid).hardsplit
 
     @app.get("/api/jobs/{jid}")
     def job_status(jid: str):
@@ -338,7 +544,7 @@ def create_app(data_dir: Path | None = None, embed: str | None = None, llm_model
                 raise HTTPException(404, "unknown profile")
         df = df.join(j.company_table, on="company_id")
         n_cand = max(len(res["_state"]["cand"]), 1) if "_state" in res else max(len(j.company_table), 1)
-        df = df.assign(top_pct=(df["rank"] / n_cand).round(5))     # position in the market: rank 1 of 24k -> top 0.004%
+        df = df.assign(tier=df["rank"].map(FB.tier), candidates=n_cand)
         if q.strip():
             # plain-text (never regex: user text as a regex could crash or hang the server), case- and accent-insensitive
             ql = CH.norm(q.strip()[:80])
@@ -584,7 +790,7 @@ def create_app(data_dir: Path | None = None, embed: str | None = None, llm_model
         return _json({
             "execution": {"timings_s": m["timings"], "market_data_build_s": state.get("build_s"), "all_local": True,
                           "external_ai_calls": 0},
-            "models": {"embedding": embed, "llm": llm_model, "llm_options": LLM.GEN_OPTIONS,
+            "models": {"embedding": j.ctx.embed_backend + (f" · ΠΡΟΣΟΧΗ: {j.ctx.embed_warning}" if j.ctx.embed_warning else ""), "llm": llm_model, "llm_options": LLM.GEN_OPTIONS,
                        "clustering": "σταθμισμένο kernel k-means πάνω στην ίδια ομοιότητα (cosine ανά ομάδα χαρακτηριστικών) που χρησιμοποιείται για ανάθεση και κατάταξη",
                        "statistics": "μονόπλευρος υπεργεωμετρικός έλεγχος (Fisher) ανά χαρακτηριστικό έναντι μη-πελατών, διόρθωση Benjamini-Hochberg, shrunk lift"},
             "selection": {"rule": m["selection_rule"], "k_table": m["k_table"], "params": m["params"]},
@@ -592,7 +798,7 @@ def create_app(data_dir: Path | None = None, embed: str | None = None, llm_model
                           "description_is_ai": p["description_is_ai"], "description_meta": p.get("description_meta")}
                          for p in j.result["profiles"]],
             "licenses": LICENSES, "ai_act": AI_ACT,
-            "limits": ["Οι ΚΑΔ είναι δηλωτικοί και θορυβώδεις.", "Ο έλεγχος groundedness ελέγχει παραπομπές και αριθμούς, όχι κάθε νοηματική λεπτομέρεια.",
+            "limits": ([] if (EB.load_result(out_root.parent) or {}).get("neural_done") else ["Η υποχρεωτική σύγκριση μοντέλων embeddings δεν έχει ολοκληρωθεί (σελίδα Ανατροφοδότηση, καρτέλα Σύγκριση embeddings)."]) + ["Οι ΚΑΔ είναι δηλωτικοί και θορυβώδεις.", "Ο έλεγχος groundedness ελέγχει παραπομπές και αριθμούς, όχι κάθε νοηματική λεπτομέρεια.",
                        "Τα αποτελέσματα δείχνουν ομοιότητα, όχι πρόβλεψη αγοράς ή φερεγγυότητας."]})
 
     @app.get("/api/export/{jid}/{name}")
